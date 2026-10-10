@@ -32,10 +32,18 @@ jobs:
       - name: Guard — only tags on main may publish
         run: |
           git fetch origin main --quiet
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::Tag is not on main. Releases are only cut from main after dev-branch testing and maintainer approval (see RELEASING.md)."
-            exit 1
-          fi
+          # 容忍推送竞态：main 分支可能因网络抖动晚于标签几秒到达，重试 3 次
+          for i in 1 2 3; do
+            if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "tag commit is on main (attempt $i)"
+              exit 0
+            fi
+            echo "attempt $i: tag commit not on main yet — retrying in 15s"
+            sleep 15
+            git fetch origin main --quiet
+          done
+          echo "::error::Tag is not on main. Releases are only cut from main after dev-branch testing and maintainer approval (see RELEASING.md)."
+          exit 1
 
       - name: Guard — package.json version must match the tag
         run: |
