@@ -39,7 +39,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.4';
+const VERSION = '0.2.6';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = ['photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft', 'designcraft'];
@@ -76,21 +76,29 @@ async function loadConfig() {
     bins: { ...DEFAULT_CONFIG.bins },
     control: { ...DEFAULT_PORTS },
   };
-  try {
-    const user = JSON.parse(await fs.readFile(path.join(HERE, 'artcraft.config.json'), 'utf8'));
-    if (user && typeof user.dataRoot === 'string' && user.dataRoot) cfg.dataRoot = user.dataRoot;
-    if (user && user.bins) {
-      for (const k of BINS) {
-        if (typeof user.bins[k] === 'string' && user.bins[k]) cfg.bins[k] = user.bins[k];
+  // 配置查找顺序：~/.dsh（持久，推荐 —— 更新替换包目录也不丢）→ 包目录（旧版兼容）
+  const candidates = [
+    path.join(os.homedir(), '.dsh', 'artcraft.config.json'),
+    path.join(HERE, 'artcraft.config.json'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const user = JSON.parse(await fs.readFile(candidate, 'utf8'));
+      if (user && typeof user.dataRoot === 'string' && user.dataRoot) cfg.dataRoot = user.dataRoot;
+      if (user && user.bins) {
+        for (const k of BINS) {
+          if (typeof user.bins[k] === 'string' && user.bins[k]) cfg.bins[k] = user.bins[k];
+        }
       }
-    }
-    if (user && user.control) {
-      for (const k of Object.keys(DEFAULT_PORTS)) {
-        const p = Number(user.control[k]);
-        if (Number.isInteger(p) && p > 0 && p < 65536) cfg.control[k] = p;
+      if (user && user.control) {
+        for (const k of Object.keys(DEFAULT_PORTS)) {
+          const p = Number(user.control[k]);
+          if (Number.isInteger(p) && p > 0 && p < 65536) cfg.control[k] = p;
+        }
       }
-    }
-  } catch { /* 无配置文件时用默认值 */ }
+      break; // 第一个可解析的配置生效
+    } catch { /* 该候选不存在/非法 → 试下一个 */ }
+  }
   return cfg;
 }
 
@@ -501,7 +509,7 @@ async function fetchLatestVersion() {
     if (res.status === 404) return { latest: null, note: 'npm 上还没有这个包' };
     if (!res.ok) throw new Error('registry 返回 ' + res.status);
     const j = await res.json();
-    return { latest: j.version ?? null };
+    return { latest: j.version ?? null, tarball: j.dist?.tarball ?? null, integrity: j.dist?.integrity ?? null };
   } catch (e) {
     return { latest: null, note: '查询 npm 失败: ' + String(e?.cause?.message || e?.message || e) };
   }
@@ -523,29 +531,10 @@ async function updateCheck() {
   };
 }
 
-async function findRuntimeTools() {
-  const isWin = process.platform === 'win32';
-  const pnCmd = isWin ? 'pnpm.cmd' : 'pnpm';
-  const probe = await runProcess(pnCmd, ['--version'], { timeoutMs: 20000 });
-  if (probe.ok) return { pnpmCmd: pnCmd };
-  try {
-    const rtRoot = path.join(os.homedir(), '.dsh', 'dsh-runtimes');
-    const entries = await fs.readdir(rtRoot, { withFileTypes: true });
-    for (const e of entries) {
-      if (!e.isDirectory()) continue;
-      const pnpmMjs = path.join(rtRoot, e.name, 'dependencies', 'pnpm', 'bin', 'pnpm.mjs');
-      const nodeExe = path.join(rtRoot, e.name, 'dependencies', 'node', 'bin', isWin ? 'node.exe' : 'node');
-      if ((await fileExists(pnpmMjs)) && (await fileExists(nodeExe))) {
-        return { nodeExe, pnpmMjs };
-      }
-    }
-  } catch { /* ignore */ }
-  return {};
-}
-
 async function updateApply() {
   const info = await detectInstall();
-  const { latest } = await fetchLatestVersion();
+  const meta = await fetchLatestVersion();
+  const latest = meta.latest;
   if (!latest) throw new Error('npm 上没有可用的发布版本');
   if (!semverGt(latest, VERSION)) return { ok: true, message: `已是最新（${VERSION}）`, needRestart: false };
 
@@ -557,19 +546,56 @@ async function updateApply() {
     return { ok: r.ok, output: (r.stdout + '\n' + r.stderr).trim(), needRestart: r.ok, latest };
   }
 
-  // npm 安装模式
-  if (!info.profileDir) throw new Error('未定位到 Harness profile 目录，无法自动更新');
-  const tools = await findRuntimeTools();
-  let cmd, args;
-  if (tools.pnpmCmd) {
-    cmd = tools.pnpmCmd; args = ['add', `${PKG_NAME}@latest`, '--dir', info.profileDir, '--registry=https://registry.npmjs.org'];
-  } else if (tools.pnpmMjs) {
-    cmd = tools.nodeExe; args = [tools.pnpmMjs, 'add', `${PKG_NAME}@latest`, '--dir', info.profileDir, '--registry=https://registry.npmjs.org'];
-  } else {
-    throw new Error('未找到 pnpm（PATH 与 ~/.dsh/dsh-runtimes 均未命中），请手动在 profile 目录执行 pnpm add');
+  // npm 安装模式：直下官方 tarball → sha512 校验 → 原子换目录。
+  // 不经 pnpm 解析器 —— 规避供应链年龄门槛 / link 依赖联动 / 镜像同步延迟。
+  if (!meta.tarball || !meta.integrity) throw new Error('registry 元数据缺少 tarball/integrity，无法安全更新');
+  const here = info.here;
+  const tmp = path.join(os.tmpdir(), 'artcraft-up-' + crypto.randomUUID());
+  await fs.mkdir(tmp, { recursive: true });
+  try {
+    const tgzPath = path.join(tmp, 'pkg.tgz');
+    const res = await fetch(meta.tarball, { signal: AbortSignal.timeout(180000) });
+    if (!res.ok) throw new Error('下载 tarball 失败: HTTP ' + res.status);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 64 * 1024 * 1024) throw new Error('tarball 超过 64MB 上限，已终止');
+    const digest = crypto.createHash('sha512').update(buf).digest('base64');
+    if (digest !== String(meta.integrity).replace(/^sha512-/, '')) {
+      throw new Error('sha512 校验失败 —— 下载内容与 registry 元数据不符，已终止');
+    }
+    await fs.writeFile(tgzPath, buf);
+    const extract = await runProcess('tar', ['-xzf', tgzPath, '-C', tmp], { timeoutMs: 60000 });
+    if (!extract.ok) throw new Error('解压失败: ' + (extract.stderr || '系统 tar 不可用'));
+    const extractedPkg = JSON.parse(await fs.readFile(path.join(tmp, 'package', 'package.json'), 'utf8'));
+    if (extractedPkg.name !== PKG_NAME || extractedPkg.version !== latest) {
+      throw new Error(`tarball 内容与预期不符（${extractedPkg.name}@${extractedPkg.version}）`);
+    }
+    // 原子换目录：rename 失败（跨卷等）时回退为整目录复制
+    const backup = here + '.old-' + Date.now();
+    try {
+      await fs.rename(here, backup).catch(() => { throw new Error('rename-busy'); });
+      await fs.rename(path.join(tmp, 'package'), here).catch(async () => {
+        await fs.cp(path.join(tmp, 'package'), here, { recursive: true, force: true });
+      });
+      await fs.rm(backup, { recursive: true, force: true }).catch(() => {});
+    } catch {
+      // 兜底：直接覆盖复制（不影响运行中的进程 —— 旧模块已在内存）
+      await fs.cp(path.join(tmp, 'package'), here, { recursive: true, force: true });
+    }
+    // 同步 profile package.json 的版本规格，防止未来 pnpm install 回滚
+    if (info.profileDir) {
+      try {
+        const pjPath = path.join(info.profileDir, 'package.json');
+        const pj = JSON.parse(await fs.readFile(pjPath, 'utf8'));
+        if (pj.dependencies && pj.dependencies[PKG_NAME] !== undefined) {
+          pj.dependencies[PKG_NAME] = latest;
+          await fs.writeFile(pjPath, JSON.stringify(pj, null, 2) + '\n');
+        }
+      } catch { /* 非关键 */ }
+    }
+    return { ok: true, output: `已更新到 v${latest}（sha512 校验通过，tarball 直装）`, needRestart: true, latest };
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
   }
-  const r = await runProcess(cmd, args, { cwd: info.profileDir, timeoutMs: 300000, shell: !!tools.pnpmCmd });
-  return { ok: r.ok, output: (r.stdout + '\n' + r.stderr).trim(), needRestart: r.ok, latest };
 }
 
 /* ============================ 插件入口 ============================ */
