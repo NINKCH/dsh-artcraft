@@ -1,0 +1,41 @@
+# Publishes @ninkch/dsh-artcraft to npm via Trusted Publishing (OIDC).
+#
+# Setup (one-time, on npmjs.com → package → Settings → Trusted Publisher):
+#   Publisher           : GitHub Actions
+#   Organization or user: NINKCH
+#   Repository          : dsh-artcraft
+#   Workflow filename   : publish.yml
+#   Environment name    : (leave empty)
+#   Allowed actions     : ☑ Allow npm publish
+#
+# Release flow: bump "version" in package.json → commit → tag v* → push the tag.
+# Requires npm >= 11.5.1 for OIDC trusted publishing (upgraded in-step below).
+
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # OIDC — this is what replaces the npm token
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Publish
+        run: npm publish --access public

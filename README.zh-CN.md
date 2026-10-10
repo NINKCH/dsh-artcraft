@@ -263,6 +263,10 @@ HTTP 面无鉴权，挂在 Harness Web 服务之下（仅回环监听）—— �
 GitHub 上传本仓库即可：`README.md` 英文优先，附
 [简体中文](README.zh-CN.md) 对照。
 
+**发版走 npm Trusted Publishing**（GitHub Actions OIDC —— 无令牌、无 OTP）：
+`.github/workflows/publish.yml` 在 `v*` 标签推送时触发；npm 包侧的可信发布指向
+`NINKCH/dsh-artcraft` / `publish.yml`。发版流程：改 `version` → 提交 → `git tag v0.x.y && git push origin v0.x.y`。
+
 ## 许可
 
 **本插件（`@ninkch/dsh-artcraft`）：Apache-2.0**（见 [LICENSE](LICENSE)）。不包含 ArtCraft 应用的任何代码 —— 只调用其公开自动化面

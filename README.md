@@ -280,6 +280,11 @@ The three places that must agree on the package name are the profile `package.js
 GitHub: this repository is self-contained; `README.md` is English-first with a
 [简体中文](README.zh-CN.md) companion.
 
+**Releases run through npm Trusted Publishing** (GitHub Actions OIDC — no tokens, no OTP):
+`.github/workflows/publish.yml` fires on `v*` tags; the trusted publisher on the npm package
+points at `NINKCH/dsh-artcraft` / `publish.yml`. To cut a release: bump `version`, commit,
+`git tag v0.x.y && git push origin v0.x.y`.
+
 ## License
 
 **This plugin (`@ninkch/dsh-artcraft`): Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
