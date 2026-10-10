@@ -584,7 +584,10 @@ export function apply(ctx) {
   ctx.effect(() => {
     const disposers = [];
     const attempt = (def) => {
-      const output = def.output ?? { type: 'object', additionalProperties: true };
+      const output = def.output ?? {
+        schema: { type: 'object', additionalProperties: true },
+        render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+      };
       for (const shape of [
         { name: def.name, description: def.description, parameters: def.schema, execute: def.execute },
         { name: def.name, description: def.description, inputSchema: def.schema, handler: def.execute },
