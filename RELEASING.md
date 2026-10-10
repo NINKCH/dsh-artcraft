@@ -30,8 +30,8 @@
    - 重启 Harness 后 `GET /artcraft/api/status` 探针（三盏灯、tools.errors 为空）
    - 涉及 UI 的：插件页详情卡人工确认
 2. 向维护者汇报"改了什么 + 测了什么 + 结果"，**获得明确批准**。
-3. `git switch main && git merge dev && git push`
-4. `git tag vX.Y.Z && git push origin vX.Y.Z` ← 这一步触发 npm 发布
+3. `git switch main && git merge dev`（推送到 GitHub 由维护者自己执行：`git push origin main dev`）
+4. GitHub → Releases → **Draft a new release** → 选/建 tag `vX.Y.Z`（必须与 package.json version 一致）→ **Publish release** ← 触发 npm 自动发布（OIDC，无令牌无 OTP）
 5. 发布后验证：Actions 绿 + `npm view @ninkch/dsh-artcraft version` 正确 + 本地重启探针正常。
 
 ## 已知教训（不要再犯）

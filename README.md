@@ -281,10 +281,10 @@ GitHub: this repository is self-contained; `README.md` is English-first with a
 [简体中文](README.zh-CN.md) companion.
 
 **Releases run through npm Trusted Publishing** (GitHub Actions OIDC — no tokens, no OTP):
-`.github/workflows/publish.yml` fires on `v*` tags **on `main` only** (a guard step rejects tags
-from other branches); the trusted publisher on the npm package points at `NINKCH/dsh-artcraft` /
-`publish.yml`. Release flow and rules live in [RELEASING.md](RELEASING.md) — in short: changes
-land on `dev`, get tested there, and are only merged to `main` and tagged with the maintainer's
+publishing is triggered by **creating a GitHub Release** (tag `vX.Y.Z` matching `package.json`);
+`.github/workflows/publish.yml` verifies the release commit is on `main` and the versions align,
+then publishes. Release flow and rules live in [RELEASING.md](RELEASING.md) — in short: changes
+land on `dev`, get tested there, and are only merged to `main` and released with the maintainer's
 explicit approval.
 
 ## License
