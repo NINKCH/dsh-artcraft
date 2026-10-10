@@ -39,10 +39,11 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.1.1';
+const VERSION = '0.2.0';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = ['photocraft', 'filmcraft', 'effectcraft'];
+const PKG_NAME = '@ninkch/dsh-artcraft';
 const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877 };
 
 const BODY_CAP = 2 * 1024 * 1024;            // 普通 JSON 请求体上限
@@ -152,14 +153,14 @@ function pushTail(arr, chunk) {
 }
 
 /** 运行子进程到结束；返回 {ok, code, signal, stdout, stderr, ms} */
-function runProcess(exe, args, { cwd, timeoutMs = 15 * 60_000 } = {}) {
+function runProcess(exe, args, { cwd, timeoutMs = 15 * 60_000, shell = false } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     const stdout = [];
     const stderr = [];
     let child;
     try {
-      child = spawn(String(exe), (args ?? []).map(String), { cwd, windowsHide: true });
+      child = spawn(String(exe), (args ?? []).map(String), { cwd, windowsHide: true, shell });
     } catch (e) {
       resolve({ ok: false, code: -1, signal: null, stdout: '', stderr: String(e?.message ?? e), ms: 0 });
       return;
@@ -442,6 +443,131 @@ function makeRoute(path, handler) {
   };
 }
 
+/* ============================ 自更新（检查 / 应用） ============================ */
+
+function semverGt(a, b) {
+  const p = (s) => String(s ?? '').trim().replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const [a1, a2, a3] = p(a), [b1, b2, b3] = p(b);
+  return a1 !== b1 ? a1 > b1 : a2 !== b2 ? a2 > b2 : a3 > b3;
+}
+
+/** 探测本插件的安装形态：git 仓库（link 开发）还是 npm 安装 */
+async function detectInstall() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const real = await fs.realpath(here);
+  let dir = real;
+  let repoDir = null;
+  while (true) {
+    try {
+      const st = await fs.stat(path.join(dir, '.git'));
+      if (st.isDirectory() || st.isFile()) { repoDir = dir; break; }
+    } catch { /* 继续 */ }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  let profileDir = null;
+  if (!repoDir) {
+    dir = path.dirname(here);
+    while (true) {
+      try {
+        const txt = await fs.readFile(path.join(dir, 'package.json'), 'utf8');
+        if (txt.includes('"dsh"')) { profileDir = dir; break; }
+      } catch { /* 继续 */ }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  let gitClean = null;
+  let branch = null;
+  if (repoDir) {
+    const st = await runProcess('git', ['status', '--porcelain'], { cwd: repoDir, timeoutMs: 20000 });
+    gitClean = st.ok && st.stdout.trim() === '';
+    const b = await runProcess('git', ['branch', '--show-current'], { cwd: repoDir, timeoutMs: 20000 });
+    branch = (b.stdout || '').trim() || null;
+  }
+  return { mode: repoDir ? 'git' : 'npm', here, real, repoDir, profileDir, gitClean, branch };
+}
+
+async function fetchLatestVersion() {
+  const url = `https://registry.npmjs.org/${PKG_NAME.replace('/', '%2f')}/latest`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (res.status === 404) return { latest: null, note: 'npm 上还没有这个包' };
+    if (!res.ok) throw new Error('registry 返回 ' + res.status);
+    const j = await res.json();
+    return { latest: j.version ?? null };
+  } catch (e) {
+    return { latest: null, note: '查询 npm 失败: ' + String(e?.cause?.message || e?.message || e) };
+  }
+}
+
+async function updateCheck() {
+  const current = VERSION;
+  const { latest, note } = await fetchLatestVersion();
+  const info = await detectInstall();
+  return {
+    current,
+    latest,
+    updateAvailable: !!(latest && semverGt(latest, current)),
+    mode: info.mode,
+    repoDir: info.repoDir,
+    gitClean: info.gitClean,
+    branch: info.branch,
+    note,
+  };
+}
+
+async function findRuntimeTools() {
+  const isWin = process.platform === 'win32';
+  const pnCmd = isWin ? 'pnpm.cmd' : 'pnpm';
+  const probe = await runProcess(pnCmd, ['--version'], { timeoutMs: 20000 });
+  if (probe.ok) return { pnpmCmd: pnCmd };
+  try {
+    const rtRoot = path.join(os.homedir(), '.dsh', 'dsh-runtimes');
+    const entries = await fs.readdir(rtRoot, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const pnpmMjs = path.join(rtRoot, e.name, 'dependencies', 'pnpm', 'bin', 'pnpm.mjs');
+      const nodeExe = path.join(rtRoot, e.name, 'dependencies', 'node', 'bin', isWin ? 'node.exe' : 'node');
+      if ((await fileExists(pnpmMjs)) && (await fileExists(nodeExe))) {
+        return { nodeExe, pnpmMjs };
+      }
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+async function updateApply() {
+  const info = await detectInstall();
+  const { latest } = await fetchLatestVersion();
+  if (!latest) throw new Error('npm 上没有可用的发布版本');
+  if (!semverGt(latest, VERSION)) return { ok: true, message: `已是最新（${VERSION}）`, needRestart: false };
+
+  if (info.mode === 'git') {
+    if (info.gitClean === false) {
+      throw new Error('插件目录有未提交的本地改动，为避免覆盖请先 git commit / stash，再执行更新');
+    }
+    const r = await runProcess('git', ['pull', '--ff-only'], { cwd: info.repoDir, timeoutMs: 120000 });
+    return { ok: r.ok, output: (r.stdout + '\n' + r.stderr).trim(), needRestart: r.ok, latest };
+  }
+
+  // npm 安装模式
+  if (!info.profileDir) throw new Error('未定位到 Harness profile 目录，无法自动更新');
+  const tools = await findRuntimeTools();
+  let cmd, args;
+  if (tools.pnpmCmd) {
+    cmd = tools.pnpmCmd; args = ['add', `${PKG_NAME}@latest`, '--dir', info.profileDir];
+  } else if (tools.pnpmMjs) {
+    cmd = tools.nodeExe; args = [tools.pnpmMjs, 'add', `${PKG_NAME}@latest`, '--dir', info.profileDir];
+  } else {
+    throw new Error('未找到 pnpm（PATH 与 ~/.dsh/dsh-runtimes 均未命中），请手动在 profile 目录执行 pnpm add');
+  }
+  const r = await runProcess(cmd, args, { cwd: info.profileDir, timeoutMs: 300000, shell: !!tools.pnpmCmd });
+  return { ok: r.ok, output: (r.stdout + '\n' + r.stderr).trim(), needRestart: r.ok, latest };
+}
+
 /* ============================ 插件入口 ============================ */
 
 const toolNames = [];
@@ -581,6 +707,23 @@ export function apply(ctx) {
           return { rel, size: data.length };
         }
         throw new Error(`未知 op: ${op}`);
+      },
+    });
+
+    attempt({
+      name: 'artcraft_update',
+      description: '检查/应用 @ninkch/dsh-artcraft 插件自身的更新：action=check 对比本地与 npm latest；action=apply 执行更新（git pull 或 pnpm add，按安装形态自动选择），完成后需重启 Harness 生效。',
+      schema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['check', 'apply'] },
+        },
+        required: ['action'],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        if (String(args.action) === 'apply') return updateApply();
+        return updateCheck();
       },
     });
 
@@ -737,6 +880,15 @@ export function apply(ctx) {
         } else {
           sendJson(res, 200, { ok: false, id: job.id, status: job.status });
         }
+      }),
+
+      makeRoute(`/${NAME}/api/update/check`, async (req, res) => {
+        sendJson(res, 200, await updateCheck());
+      }),
+
+      makeRoute(`/${NAME}/api/update/apply`, async (req, res) => {
+        if (req.method !== 'POST') throw new Error('仅支持 POST');
+        sendJson(res, 200, await updateApply());
       }),
 
       makeRoute(`/${NAME}/api/control`, async (req, res) => {

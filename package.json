@@ -1,8 +1,8 @@
 {
   "name": "@ninkch/dsh-artcraft",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Drive the open-source ArtCraft studio apps (PhotoCraft / FilmCraft / EffectCraft) from DeepSeek Harness — agent tools + a same-origin HTTP API for headless CLI runs and the JSON control channel.",
+  "description": "Drive the open-source ArtCraft studio apps (PhotoCraft / FilmCraft / EffectCraft) from DeepSeek Harness — agent tools, a same-origin HTTP API, and a sidebar panel with toolchain status and self-update.",
   "keywords": [
     "deepseek-harness",
     "dsh-plugin",
@@ -14,15 +14,25 @@
     "ai-agents"
   ],
   "license": "Apache-2.0",
+  "author": "NINKCH",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NINKCH/dsh-artcraft.git"
+  },
   "engines": {
     "node": ">=18"
   },
   "exports": {
     ".": "./index.js",
+    "./client": "./client.js",
     "./package.json": "./package.json"
   },
   "files": [
     "index.js",
+    "client.js",
     "cordis.patch.yml",
     "artcraft.config.json.example",
     "README.md",
@@ -32,6 +42,10 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
     }
   }
 }
