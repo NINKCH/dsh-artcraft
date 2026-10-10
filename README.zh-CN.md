@@ -6,7 +6,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`@local/artcraft` · DeepSeek Harness 插件 · MIT
+`@local/artcraft` · DeepSeek Harness 插件 · Apache-2.0
 
 </div>
 
@@ -259,7 +259,7 @@ HTTP 面无鉴权，挂在 Harness Web 服务之下（仅回环监听）—— �
 
 ## 许可
 
-**本插件（`@local/artcraft`）：MIT。** 不包含 ArtCraft 应用的任何代码 —— 只调用其公开自动化面
+**本插件（`@local/artcraft`）：Apache-2.0**（见 [LICENSE](LICENSE)）。不包含 ArtCraft 应用的任何代码 —— 只调用其公开自动化面
 （无头 CLI + JSON 控制通道）。
 
 **ArtCraft 各应用本身并非 OSI 开源**：它们采用 **ArtCraft License (WIP)** —— 一种 "fair source"

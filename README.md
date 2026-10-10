@@ -6,7 +6,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`@local/artcraft` · a [DeepSeek Harness](https://github.com/deepseek-ai) plugin · MIT
+`@local/artcraft` · a [DeepSeek Harness](https://github.com/deepseek-ai) plugin · Apache-2.0
 
 </div>
 
@@ -276,8 +276,9 @@ GitHub: this repository is self-contained; `README.md` is English-first with a
 
 ## License
 
-**This plugin (`@local/artcraft`): MIT.** It ships none of the ArtCraft apps' code — it only
-drives their public automation surfaces (headless CLI + JSON control channel).
+**This plugin (`@local/artcraft`): Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
+ArtCraft apps' code — it only drives their public automation surfaces (headless CLI + JSON
+control channel).
 
 **The ArtCraft apps themselves** are *not* OSI open source: they are distributed under the
 **ArtCraft License (WIP)**, a "fair source" license ([verbatim text](NOTICE.md)). The short
