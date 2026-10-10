@@ -1,0 +1,21 @@
+{
+  "name": "@local/artcraft",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DeepSeek Harness 插件：把 ArtCraft 家族 (PhotoCraft/FilmCraft/EffectCraft) 的 CLI 与 JSON 控制通道封装成 Agent Tools 和 HTTP API，供无限画布等工作流前端调用。",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "artcraft.config.json.example",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

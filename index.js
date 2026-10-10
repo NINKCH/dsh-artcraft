@@ -1,0 +1,771 @@
+/**
+ * @local/artcraft — DeepSeek Harness 插件（Host 半侧）
+ *
+ * 把 ArtCraft 家族的自动化接口封装成两种形态：
+ *   1) Agent Tools（对话内直接驱动）:
+ *        artcraft_status  —— 检查三个 CLI 是否可用、数据目录、控制通道配置
+ *        artcraft_cli     —— 运行 photocraft-cli / filmcraft-cli / effectcraft-cli 任意命令
+ *        artcraft_control —— 向运行中的 FilmCraft/EffectCraft JSON 控制通道发一条命令
+ *        artcraft_fs      —— 在 dataRoot 内读写文件（准备 actions.json / 取回产物）
+ *   2) HTTP API（同源 /artcraft/api/*，供无限画布等前端调用，无 CORS 问题）:
+ *        GET  /artcraft/api/status     环境自检
+ *        GET  /artcraft/api/projects   列出 dataRoot 下的项目目录
+ *        GET  /artcraft/api/fs         list / stat / readtext
+ *        POST /artcraft/api/fs         write（JSON base64/text 或原始字节流）
+ *        GET  /artcraft/api/file       下载产物（流式，raw 或 text）
+ *        GET  /artcraft/api/job        查询任务（单个或列表）
+ *        POST /artcraft/api/job        启动长任务（渲染/导出/批处理）
+ *        POST /artcraft/api/job/cancel 取消任务
+ *        POST /artcraft/api/control    控制通道同步调用（engine.execute / ui.*）
+ *
+ * 安全约定：
+ *   - 所有文件操作限制在 dataRoot 内（拒绝 .. 越界与绝对路径外逃）；
+ *   - 子进程只允许三个白名单键（photocraft/filmcraft/effectcraft），
+ *     具体可执行文件由 artcraft.config.json 指定；
+ *   - 控制通道只连 127.0.0.1，与 ArtCraft 官方协议一致（App 需以 --control 启动；
+ *     PhotoCraft 的控制通道为鉴权模式，本插件不代理，故仅支持 filmcraft/effectcraft）；
+ *   - 本插件与 infinite-canvas 零代码耦合，仅通过 HTTP + 磁盘目录约定协作。
+ *
+ * 信任模型：HTTP API 无鉴权，随 DSH Web GUI 仅监听回环；不要把 GUI 端口暴露到局域网。
+ */
+import { spawn } from 'node:child_process';
+import net from 'node:net';
+import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
+const NAME = 'artcraft';
+const VERSION = '0.1.1';
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+const BINS = ['photocraft', 'filmcraft', 'effectcraft'];
+const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877 };
+
+const BODY_CAP = 2 * 1024 * 1024;            // 普通 JSON 请求体上限
+const WRITE_CAP = 320 * 1024 * 1024;         // 上传（写盘）上限
+const READ_CAP = 2 * 1024 * 1024 * 1024;     // 读取/下载上限（流式传输，不占大内存）
+const TEXT_CAP = 16 * 1024 * 1024;           // readtext / as=text 的上限
+const TAIL_LINES = 400;                      // 任务输出环形缓冲（行）
+const LINE_CAP = 4000;                       // 单行截断
+const KEEP_JOBS = 64;                        // 已结束任务保留条数
+
+const DEFAULT_CONFIG = {
+  dataRoot: path.join(os.homedir(), 'craft-workspace'),
+  bins: {
+    photocraft: 'photocraft-cli',
+    filmcraft: 'filmcraft-cli',
+    effectcraft: 'effectcraft-cli',
+  },
+  control: { ...DEFAULT_PORTS },
+};
+
+/* ============================ 配置 ============================ */
+
+async function loadConfig() {
+  const cfg = {
+    dataRoot: DEFAULT_CONFIG.dataRoot,
+    bins: { ...DEFAULT_CONFIG.bins },
+    control: { ...DEFAULT_PORTS },
+  };
+  try {
+    const user = JSON.parse(await fs.readFile(path.join(HERE, 'artcraft.config.json'), 'utf8'));
+    if (user && typeof user.dataRoot === 'string' && user.dataRoot) cfg.dataRoot = user.dataRoot;
+    if (user && user.bins) {
+      for (const k of BINS) {
+        if (typeof user.bins[k] === 'string' && user.bins[k]) cfg.bins[k] = user.bins[k];
+      }
+    }
+    if (user && user.control) {
+      for (const k of Object.keys(DEFAULT_PORTS)) {
+        const p = Number(user.control[k]);
+        if (Number.isInteger(p) && p > 0 && p < 65536) cfg.control[k] = p;
+      }
+    }
+  } catch { /* 无配置文件时用默认值 */ }
+  return cfg;
+}
+
+/* ============================ 路径与进程 ============================ */
+
+/** 把 rel 解析为 dataRoot 内的绝对路径，拒绝越界 */
+function resolveSafeRel(dataRoot, rel) {
+  const root = path.resolve(String(dataRoot));
+  const p = path.resolve(root, String(rel ?? '.'));
+  if (p !== root && !p.startsWith(root + path.sep)) {
+    throw new Error(`路径越界（必须在数据目录内）: ${rel}`);
+  }
+  return p;
+}
+
+async function ensureDirSafe(cfg, rel) {
+  const p = resolveSafeRel(cfg.dataRoot, rel ?? '.');
+  await fs.mkdir(p, { recursive: true });
+  return p;
+}
+
+function cliNameFor(key) {
+  return process.platform === 'win32' ? `${key}-cli.exe` : `${key}-cli`;
+}
+
+/** 配置值三种形态：完整 exe 路径 / 目录（自动拼 <key>-cli[.exe]）/ 裸命令名（搜 PATH） */
+async function resolveBin(cfg, key) {
+  if (!BINS.includes(key)) throw new Error(`bin 必须是 ${BINS.join(' | ')} 之一`);
+  const raw = String(cfg.bins[key] ?? '').trim();
+  if (!raw) throw new Error(`artcraft.config.json 未配置 bins.${key}`);
+  if (path.isAbsolute(raw)) {
+    let st = null;
+    try { st = await fs.stat(raw); } catch { /* fallthrough */ }
+    if (st && st.isDirectory()) return path.join(raw, cliNameFor(key));
+    return raw;
+  }
+  // 裸命令名 → PATH 查找
+  const finder = process.platform === 'win32' ? 'where' : 'which';
+  const found = await new Promise((resolve) => {
+    let out = '';
+    let child;
+    try {
+      child = spawn(finder, [raw], { windowsHide: true });
+    } catch { resolve(null); return; }
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (d) => { out += d; });
+    child.on('error', () => resolve(null));
+    child.on('close', (code) => {
+      const first = String(out).split(/\r?\n/).find((l) => l.trim());
+      resolve(code === 0 && first ? first.trim() : null);
+    });
+  });
+  return found ?? raw; // 找不到也让 spawn 自己报错，错误信息更真实
+}
+
+function pushTail(arr, chunk) {
+  // CLI 进度常用 \r 刷新同一行，按 \r\n|\r|\n 全部切开，环形缓冲自然保留最后几百行
+  const lines = String(chunk).split(/\r\n|\r|\n/);
+  for (const line of lines) {
+    if (!line && lines.length === 1) continue;
+    arr.push(line.length > LINE_CAP ? line.slice(0, LINE_CAP) + '…' : line);
+  }
+  if (arr.length > TAIL_LINES) arr.splice(0, arr.length - TAIL_LINES);
+}
+
+/** 运行子进程到结束；返回 {ok, code, signal, stdout, stderr, ms} */
+function runProcess(exe, args, { cwd, timeoutMs = 15 * 60_000 } = {}) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const stdout = [];
+    const stderr = [];
+    let child;
+    try {
+      child = spawn(String(exe), (args ?? []).map(String), { cwd, windowsHide: true });
+    } catch (e) {
+      resolve({ ok: false, code: -1, signal: null, stdout: '', stderr: String(e?.message ?? e), ms: 0 });
+      return;
+    }
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill(); } catch { /* ignore */ }
+    }, Math.max(1000, Number(timeoutMs) || 15 * 60_000));
+
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (d) => pushTail(stdout, d));
+    child.stderr?.on('data', (d) => pushTail(stderr, d));
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      resolve({
+        ok: false, code: -1, signal: null,
+        stdout: stdout.join('\n'),
+        stderr: stderr.join('\n') + `\n[spawn] ${e?.message ?? e}`,
+        ms: Date.now() - started,
+      });
+    });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      resolve({
+        ok: code === 0 && !timedOut,
+        code,
+        signal: timedOut ? 'TIMEOUT' : signal,
+        stdout: stdout.join('\n'),
+        stderr: stderr.join('\n') + (timedOut ? `\n[timeout] 超过 ${timeoutMs}ms 已终止` : ''),
+        ms: Date.now() - started,
+      });
+    });
+  });
+}
+
+/* ============================ 控制通道（JSON lines over TCP） ============================ */
+
+/**
+ * FilmCraft/EffectCraft 官方协议：127.0.0.1:<port>，一行请求一行回复。
+ * 请求：{"id":1,"method":"engine.execute","params":{...}}
+ * 回复：{"id":1,"ok":true,"result":{...}} 或 {"ok":false,"error":"..."}
+ */
+function controlCall(port, method, params, { timeoutMs = 30_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const id = 1;
+    const sock = net.connect({ host: '127.0.0.1', port: Number(port) });
+    let buf = '';
+    let settled = false;
+    const finish = (fn, v) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { sock.destroy(); } catch { /* ignore */ }
+      fn(v);
+    };
+    const timer = setTimeout(
+      () => finish(reject, new Error(`控制通道 ${port} 响应超时（${timeoutMs}ms）`)),
+      Math.max(1000, Number(timeoutMs) || 30_000),
+    );
+    sock.on('connect', () => {
+      sock.write(JSON.stringify({ id, method, params: params ?? {} }) + '\n');
+    });
+    sock.on('data', (d) => {
+      buf += d.toString('utf8');
+      const i = buf.indexOf('\n');
+      if (i < 0) {
+        if (buf.length > 4 * 1024 * 1024) finish(reject, new Error('控制通道单行回复超过 4MiB'));
+        return;
+      }
+      const line = buf.slice(0, i).trim();
+      if (!line) return;
+      let reply;
+      try { reply = JSON.parse(line); } catch {
+        finish(reject, new Error(`控制通道返回非 JSON: ${line.slice(0, 200)}`));
+        return;
+      }
+      if (reply && reply.ok === false) finish(reject, new Error(String(reply.error ?? '控制通道错误')));
+      else finish(resolve, reply?.result !== undefined ? reply.result : reply);
+    });
+    sock.on('error', (e) => {
+      finish(reject, new Error(
+        `控制通道 127.0.0.1:${port} 连接失败（${e?.message ?? e}）——目标 App 是否已用 --control ${port} 启动？`,
+      ));
+    });
+  });
+}
+
+/* ============================ 长任务（渲染/批处理） ============================ */
+
+const jobs = new Map(); // id -> job
+
+async function statOutputs(cfg, outputs) {
+  const out = [];
+  for (const item of outputs ?? []) {
+    const rel = String(item.rel ?? item);
+    try {
+      const st = await fs.stat(resolveSafeRel(cfg.dataRoot, rel));
+      out.push({ rel, exists: true, dir: st.isDirectory(), size: st.size, mtime: st.mtimeMs });
+    } catch {
+      out.push({ rel, exists: false, dir: false, size: null, mtime: null });
+    }
+  }
+  return out;
+}
+
+function jobSnapshot(job, tailLines = 60) {
+  const tail = Math.max(1, Math.min(TAIL_LINES, Number(tailLines) || 60));
+  return {
+    id: job.id,
+    bin: job.bin,
+    args: job.args,
+    cwd: job.cwd,
+    status: job.status, // running | done | failed | timeout
+    code: job.code,
+    signal: job.signal,
+    startedAt: job.startedAt,
+    endedAt: job.endedAt,
+    durationMs: (job.endedAt ?? Date.now()) - job.startedAt,
+    stdout: job.stdout.slice(-tail).join('\n'),
+    stderr: job.stderr.slice(-tail).join('\n'),
+    outputs: job.outputs,
+  };
+}
+
+function pruneJobs() {
+  const finished = [...jobs.values()]
+    .filter((j) => j.status !== 'running')
+    .sort((a, b) => a.startedAt - b.startedAt);
+  while (jobs.size > KEEP_JOBS && finished.length) {
+    const oldest = finished.shift();
+    jobs.delete(oldest.id);
+  }
+}
+
+async function startJob(cfg, { bin, args, cwdRel, outputs, timeoutMs }) {
+  if (!BINS.includes(bin)) throw new Error(`bin 必须是 ${BINS.join(' | ')} 之一`);
+  if (args != null && !Array.isArray(args)) throw new Error('args 必须是字符串数组');
+  const exe = await resolveBin(cfg, bin);
+  const cwd = await ensureDirSafe(cfg, cwdRel ?? '.');
+  const id = crypto.randomUUID();
+  const job = {
+    id,
+    bin,
+    exe,
+    args: (args ?? []).map(String),
+    cwd,
+    status: 'running',
+    code: null,
+    signal: null,
+    startedAt: Date.now(),
+    endedAt: null,
+    stdout: [],
+    stderr: [],
+    outputs: (outputs ?? []).map((rel) => ({ rel: String(rel) })),
+    child: null,
+    timer: null,
+  };
+  const child = spawn(job.exe, job.args, { cwd, windowsHide: true });
+  job.child = child;
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+  child.stdout?.on('data', (d) => pushTail(job.stdout, d));
+  child.stderr?.on('data', (d) => pushTail(job.stderr, d));
+  let timedOut = false;
+  job.timer = setTimeout(() => {
+    timedOut = true;
+    try { child.kill(); } catch { /* ignore */ }
+  }, Math.max(1000, Number(timeoutMs) || 60 * 60_000));
+  child.on('error', (e) => {
+    clearTimeout(job.timer);
+    job.status = 'failed';
+    job.code = -1;
+    job.endedAt = Date.now();
+    pushTail(job.stderr, `[spawn] ${e?.message ?? e}`);
+    pruneJobs();
+  });
+  child.on('close', (code, signal) => {
+    clearTimeout(job.timer);
+    job.code = code;
+    job.signal = timedOut ? 'TIMEOUT' : signal;
+    job.status = timedOut ? 'timeout' : (code === 0 ? 'done' : 'failed');
+    job.endedAt = Date.now();
+    pruneJobs();
+  });
+  jobs.set(id, job);
+  return { id, bin, exe, args: job.args, status: job.status };
+}
+
+/* ============================ 状态自检 ============================ */
+
+async function fileExists(p) {
+  try { return (await fs.stat(p)).isFile(); } catch { return false; }
+}
+
+async function statusInfo(cfg, meta) {
+  const bins = {};
+  for (const key of BINS) {
+    let exe = null;
+    let found = false;
+    let note = '';
+    try {
+      exe = await resolveBin(cfg, key);
+      found = exe ? await fileExists(exe) : false;
+      if (!found) note = '未找到可执行文件——请检查 artcraft.config.json 的 bins 路径或 PATH';
+    } catch (e) {
+      note = String(e?.message ?? e);
+    }
+    bins[key] = { configured: cfg.bins[key], exe, found, note };
+  }
+  let dataRoot = { path: cfg.dataRoot, exists: false };
+  try { dataRoot.exists = (await fs.stat(cfg.dataRoot)).isDirectory(); } catch { /* 不存在 */ }
+  return {
+    plugin: NAME,
+    version: VERSION,
+    platform: process.platform,
+    dataRoot,
+    bins,
+    control: cfg.control,
+    jobs: {
+      total: jobs.size,
+      running: [...jobs.values()].filter((j) => j.status === 'running').length,
+    },
+    tools: meta,
+  };
+}
+
+/* ============================ HTTP 基础设施 ============================ */
+
+function sendJson(res, code, obj) {
+  res.setHeader('content-type', 'application/json; charset=utf-8');
+  res.statusCode = code;
+  res.end(JSON.stringify(obj));
+}
+
+async function readBody(req, cap = BODY_CAP) {
+  const chunks = [];
+  let n = 0;
+  for await (const chunk of req) {
+    n += chunk.length;
+    if (n > cap) throw new Error(`请求体超过上限（${cap} 字节）`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+async function readJson(req, cap = BODY_CAP) {
+  const raw = await readBody(req, cap);
+  if (!raw.length) return {};
+  return JSON.parse(raw.toString('utf8'));
+}
+
+const CONTENT_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+  '.gif': 'image/gif', '.bmp': 'image/bmp', '.tif': 'image/tiff', '.tiff': 'image/tiff',
+  '.psd': 'image/vnd.adobe.photoshop',
+  '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.mkv': 'video/x-matroska',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg',
+  '.json': 'application/json', '.xml': 'application/xml', '.edl': 'text/plain',
+  '.srt': 'text/plain', '.vtt': 'text/vtt', '.txt': 'text/plain', '.md': 'text/plain',
+  '.cube': 'text/plain', '.ecproj': 'application/json', '.fcproj': 'application/json',
+};
+
+function makeRoute(path, handler) {
+  return {
+    kind: 'exact',
+    path,
+    async handler(req, res) {
+      try {
+        await handler(req, res);
+      } catch (e) {
+        // 流式响应中途出错时头部已发出，只能断开连接
+        try {
+          if (res.headersSent) { res.destroy(); return; }
+          sendJson(res, 400, { error: String((e && e.message) || e) });
+        } catch { try { res.destroy(); } catch { /* ignore */ } }
+      }
+    },
+  };
+}
+
+/* ============================ 插件入口 ============================ */
+
+const toolNames = [];
+const toolErrors = [];
+
+export const inject = ['tools', 'webServer'];
+
+export function apply(ctx) {
+  /* ---- Agent Tools（防御式注册：形状不匹配也不影响 HTTP API） ---- */
+  ctx.effect(() => {
+    const disposers = [];
+    const attempt = (def) => {
+      for (const shape of [
+        { name: def.name, description: def.description, parameters: def.schema, execute: def.execute },
+        { name: def.name, description: def.description, inputSchema: def.schema, handler: def.execute },
+      ]) {
+        try {
+          const d = ctx.tools.register(shape);
+          if (typeof d === 'function') disposers.push(d);
+          toolNames.push(def.name);
+          return;
+        } catch (e) {
+          def.lastError = String((e && e.message) || e);
+        }
+      }
+      toolErrors.push(`${def.name}: ${def.lastError ?? '注册失败'}`);
+    };
+
+    attempt({
+      name: 'artcraft_status',
+      description: '检查 ArtCraft 工具链（photocraft/filmcraft/effectcraft CLI）是否可用，报告数据目录、控制通道端口与任务状态。',
+      schema: { type: 'object', properties: {}, additionalProperties: false },
+      async execute() {
+        const cfg = await loadConfig();
+        return statusInfo(cfg, { registered: [...toolNames], errors: [...toolErrors] });
+      },
+    });
+
+    attempt({
+      name: 'artcraft_cli',
+      description: '运行 ArtCraft 家族 CLI 的任意子命令（photocraft-cli / filmcraft-cli / effectcraft-cli）。长渲染请改用 HTTP POST /artcraft/api/job 后台执行。',
+      schema: {
+        type: 'object',
+        properties: {
+          bin: { type: 'string', enum: [...BINS], description: '工具键' },
+          args: { type: 'array', items: { type: 'string' }, description: '命令行参数（不含程序名）' },
+          cwdRel: { type: 'string', description: '工作目录，相对 dataRoot' },
+          timeoutMs: { type: 'number', description: '超时毫秒，默认 900000' },
+        },
+        required: ['bin', 'args'],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const cfg = await loadConfig();
+        if (args.args != null && !Array.isArray(args.args)) throw new Error('args 必须是字符串数组');
+        const exe = await resolveBin(cfg, String(args.bin));
+        const cwd = await ensureDirSafe(cfg, args.cwdRel ?? '.');
+        const r = await runProcess(exe, args.args ?? [], { cwd, timeoutMs: args.timeoutMs });
+        return { bin: args.bin, exe, cwd, ...r };
+      },
+    });
+
+    attempt({
+      name: 'artcraft_control',
+      description: '向运行中的 FilmCraft(--control 9876) / EffectCraft(--control 9877) JSON 控制通道发送一条命令，如 engine.execute / ui.screenshot。PhotoCraft 控制通道为鉴权模式，不在代理范围。',
+      schema: {
+        type: 'object',
+        properties: {
+          app: { type: 'string', enum: ['filmcraft', 'effectcraft'], description: '目标应用（决定端口）' },
+          method: { type: 'string', description: '如 engine.execute / ui.inspect / ui.screenshot' },
+          params: { type: 'object', description: '命令参数' },
+          timeoutMs: { type: 'number' },
+        },
+        required: ['app', 'method'],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const cfg = await loadConfig();
+        const port = cfg.control[String(args.app)];
+        if (!port) throw new Error(`未知 app: ${args.app}`);
+        const result = await controlCall(port, String(args.method), args.params ?? {}, { timeoutMs: args.timeoutMs });
+        return { app: args.app, port, method: args.method, result };
+      },
+    });
+
+    attempt({
+      name: 'artcraft_fs',
+      description: '在 craft 数据目录（dataRoot）内进行文件操作：list / stat / readtext / write / mkdir。所有路径相对 dataRoot，禁止越界。',
+      schema: {
+        type: 'object',
+        properties: {
+          op: { type: 'string', enum: ['list', 'stat', 'readtext', 'write', 'mkdir'] },
+          rel: { type: 'string', description: '相对 dataRoot 的路径' },
+          text: { type: 'string', description: 'op=write 时的文本内容' },
+          base64: { type: 'string', description: 'op=write 时的二进制内容（base64）' },
+        },
+        required: ['op', 'rel'],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const cfg = await loadConfig();
+        const rel = String(args.rel ?? '');
+        const op = String(args.op);
+        if (op === 'list') {
+          const dir = resolveSafeRel(cfg.dataRoot, rel || '.');
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          const out = [];
+          for (const ent of entries) {
+            const st = await fs.stat(path.join(dir, ent.name)).catch(() => null);
+            out.push({ name: ent.name, dir: ent.isDirectory(), size: st?.size ?? null, mtime: st?.mtimeMs ?? null });
+          }
+          return { rel, entries: out };
+        }
+        if (op === 'stat') {
+          const st = await fs.stat(resolveSafeRel(cfg.dataRoot, rel));
+          return { rel, size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() };
+        }
+        if (op === 'readtext') {
+          const p = resolveSafeRel(cfg.dataRoot, rel);
+          const st = await fs.stat(p);
+          if (st.size > TEXT_CAP) throw new Error('文件超过 16MB，请用 GET /artcraft/api/file 取回');
+          const buf = await fs.readFile(p);
+          return { rel, text: buf.toString('utf8') };
+        }
+        if (op === 'mkdir') {
+          const p = await ensureDirSafe(cfg, rel);
+          return { rel, path: p };
+        }
+        if (op === 'write') {
+          const p = resolveSafeRel(cfg.dataRoot, rel);
+          await fs.mkdir(path.dirname(p), { recursive: true });
+          let data;
+          if (typeof args.base64 === 'string') data = Buffer.from(args.base64, 'base64');
+          else if (typeof args.text === 'string') data = Buffer.from(args.text, 'utf8');
+          else throw new Error('write 需要 text 或 base64');
+          await fs.writeFile(p, data);
+          return { rel, size: data.length };
+        }
+        throw new Error(`未知 op: ${op}`);
+      },
+    });
+
+    return () => {
+      for (const d of disposers) { try { d(); } catch { /* ignore */ } }
+    };
+  }, `${NAME}: agent tools`);
+
+  /* ---- HTTP API ---- */
+  ctx.effect(() => {
+    const routes = [
+      makeRoute(`/${NAME}/api/status`, async (req, res) => {
+        const cfg = await loadConfig();
+        sendJson(res, 200, await statusInfo(cfg, { registered: [...toolNames], errors: [...toolErrors] }));
+      }),
+
+      makeRoute(`/${NAME}/api/projects`, async (req, res) => {
+        const cfg = await loadConfig();
+        await fs.mkdir(cfg.dataRoot, { recursive: true });
+        const entries = await fs.readdir(cfg.dataRoot, { withFileTypes: true });
+        const projects = [];
+        for (const ent of entries) {
+          if (!ent.isDirectory()) continue;
+          const st = await fs.stat(path.join(cfg.dataRoot, ent.name)).catch(() => null);
+          projects.push({ name: ent.name, mtime: st?.mtimeMs ?? null });
+        }
+        projects.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
+        sendJson(res, 200, { dataRoot: cfg.dataRoot, projects });
+      }),
+
+      makeRoute(`/${NAME}/api/fs`, async (req, res) => {
+        const cfg = await loadConfig();
+        const url = new URL(req.url, 'http://x');
+        if (req.method === 'GET') {
+          const op = url.searchParams.get('op') ?? 'list';
+          const rel = url.searchParams.get('rel') ?? '.';
+          if (op === 'list') {
+            const dir = resolveSafeRel(cfg.dataRoot, rel);
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            const out = [];
+            for (const ent of entries) {
+              const st = await fs.stat(path.join(dir, ent.name)).catch(() => null);
+              out.push({ name: ent.name, dir: ent.isDirectory(), size: st?.size ?? null, mtime: st?.mtimeMs ?? null });
+            }
+            sendJson(res, 200, { rel, entries: out });
+            return;
+          }
+          if (op === 'stat') {
+            const st = await fs.stat(resolveSafeRel(cfg.dataRoot, rel));
+            sendJson(res, 200, { rel, size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() });
+            return;
+          }
+          if (op === 'readtext') {
+            const p = resolveSafeRel(cfg.dataRoot, rel);
+            const st = await fs.stat(p);
+            if (st.size > TEXT_CAP) throw new Error('文件超过 16MB，请改用 GET /artcraft/api/file');
+            const buf = await fs.readFile(p);
+            sendJson(res, 200, { rel, text: buf.toString('utf8') });
+            return;
+          }
+          throw new Error(`未知 op: ${op}`);
+        }
+        if (req.method === 'POST') {
+          const action = url.searchParams.get('action') ?? 'write';
+          if (action === 'mkdir') {
+            const body = await readJson(req);
+            const p = await ensureDirSafe(cfg, body.rel ?? url.searchParams.get('rel'));
+            sendJson(res, 200, { ok: true, path: p });
+            return;
+          }
+          // write：JSON {rel, base64|text} 或原始字节流（rel 走查询串）
+          const isJson = String(req.headers['content-type'] ?? '').includes('json');
+          let rel;
+          let data;
+          if (isJson) {
+            const body = await readJson(req, WRITE_CAP);
+            rel = String(body.rel ?? url.searchParams.get('rel') ?? '');
+            if (typeof body.base64 === 'string') data = Buffer.from(body.base64.replace(/\s+/g, ''), 'base64');
+            else if (typeof body.text === 'string') data = Buffer.from(body.text, 'utf8');
+            else throw new Error('write 需要 base64 或 text 字段');
+          } else {
+            rel = String(url.searchParams.get('rel') ?? '');
+            data = await readBody(req, WRITE_CAP);
+          }
+          if (!rel) throw new Error('缺少 rel');
+          const p = resolveSafeRel(cfg.dataRoot, rel);
+          await fs.mkdir(path.dirname(p), { recursive: true });
+          await fs.writeFile(p, data);
+          sendJson(res, 200, { ok: true, rel, size: data.length });
+          return;
+        }
+        throw new Error('仅支持 GET/POST');
+      }),
+
+      makeRoute(`/${NAME}/api/file`, async (req, res) => {
+        const cfg = await loadConfig();
+        if (req.method !== 'GET') throw new Error('仅支持 GET');
+        const url = new URL(req.url, 'http://x');
+        const rel = String(url.searchParams.get('rel') ?? '');
+        const p = resolveSafeRel(cfg.dataRoot, rel);
+        const st = await fs.stat(p);
+        if (!st.isFile()) throw new Error('不是常规文件');
+        if (st.size > READ_CAP) throw new Error(`文件超过读取上限（${Math.round(READ_CAP / 1048576)}MB）`);
+        if (url.searchParams.get('as') === 'text') {
+          if (st.size > TEXT_CAP) throw new Error('文本模式上限 16MB，请直接下载原始文件');
+          const buf = await fs.readFile(p);
+          sendJson(res, 200, { rel, text: buf.toString('utf8') });
+          return;
+        }
+        // 流式传输：产物可能是几百 MB 的视频，不整读进内存
+        res.setHeader('content-type', CONTENT_TYPES[path.extname(p).toLowerCase()] ?? 'application/octet-stream');
+        res.setHeader('content-length', st.size);
+        await pipeline(createReadStream(p), res);
+      }),
+
+      makeRoute(`/${NAME}/api/job`, async (req, res) => {
+        const cfg = await loadConfig();
+        const url = new URL(req.url, 'http://x');
+        if (req.method === 'GET') {
+          const id = url.searchParams.get('id');
+          const tail = Number(url.searchParams.get('tail') ?? 60);
+          if (id) {
+            const job = jobs.get(id);
+            if (!job) throw new Error('任务不存在或已被回收');
+            job.outputs = await statOutputs(cfg, job.outputs);
+            sendJson(res, 200, jobSnapshot(job, tail));
+            return;
+          }
+          const list = [];
+          for (const job of [...jobs.values()].reverse()) {
+            job.outputs = await statOutputs(cfg, job.outputs);
+            list.push(jobSnapshot(job, 5));
+          }
+          sendJson(res, 200, { jobs: list });
+          return;
+        }
+        if (req.method === 'POST') {
+          const body = await readJson(req);
+          const started = await startJob(cfg, body);
+          sendJson(res, 200, started);
+          return;
+        }
+        throw new Error('仅支持 GET/POST');
+      }),
+
+      makeRoute(`/${NAME}/api/job/cancel`, async (req, res) => {
+        if (req.method !== 'POST') throw new Error('仅支持 POST');
+        const { id } = await readJson(req);
+        const job = jobs.get(String(id ?? ''));
+        if (!job) throw new Error('任务不存在或已被回收');
+        if (job.status === 'running') {
+          try { job.child?.kill(); } catch { /* ignore */ }
+          sendJson(res, 200, { ok: true, id: job.id, status: 'cancelling' });
+        } else {
+          sendJson(res, 200, { ok: false, id: job.id, status: job.status });
+        }
+      }),
+
+      makeRoute(`/${NAME}/api/control`, async (req, res) => {
+        if (req.method !== 'POST') throw new Error('仅支持 POST');
+        const cfg = await loadConfig();
+        const body = await readJson(req);
+        const port = body.port ?? cfg.control[String(body.app ?? '')];
+        if (!(Number(port) > 0)) throw new Error('需要 app (filmcraft|effectcraft) 或 port');
+        const result = await controlCall(
+          Number(port),
+          String(body.method),
+          body.params ?? {},
+          { timeoutMs: body.timeoutMs },
+        );
+        sendJson(res, 200, { ok: true, port: Number(port), method: body.method, result });
+      }),
+    ];
+
+    const disposers = routes.map((r) => ctx.webServer.register(r));
+    return () => {
+      for (const d of disposers) { try { d(); } catch { /* ignore */ } }
+    };
+  }, `${NAME}: api routes`);
+
+  /* ---- 清理：插件重载/停用时终止所有子任务 ---- */
+  ctx.effect(() => () => {
+    for (const job of jobs.values()) {
+      try { job.child?.kill(); } catch { /* ignore */ }
+      try { clearTimeout(job.timer); } catch { /* ignore */ }
+    }
+  }, `${NAME}: job cleanup`);
+}
