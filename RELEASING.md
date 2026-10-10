@@ -34,3 +34,5 @@
 - bypass-2FA 令牌**不能 unpublish** —— 删除已发布包只能维护者在 npmjs.com 网页操作。
 - DSH 工具定义必须声明 `output: { schema, render?, presentationMeta? }`，缺了整个工具注册失败。
 - 改 registry/账号类配置前先确认默认 registry（本机默认是淘宝镜像，发布必须显式指定官方源）。
+- **打标签前必须同步 package.json 的 version**：v0.2.4 首次打标签时 index.js 升了版本但 package.json 漏改 → `npm publish` 撞"不能覆盖已发布版本"而失败。现在工作流有守卫（tag ≠ package.json 版本 → 第一步就失败），但根上要在打标签前自查。
+- 检查更新的语义：**只对比 npm 版本号**（本地领先不算待更新、版本相同即最新），绝不比较 SHA；更新完成后只提示 + 等用户决定何时重启，绝不自动刷新/重启页面。
