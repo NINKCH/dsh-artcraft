@@ -1,9 +1,22 @@
 {
   "name": "@local/artcraft",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.1",
   "type": "module",
-  "description": "DeepSeek Harness 插件：把 ArtCraft 家族 (PhotoCraft/FilmCraft/EffectCraft) 的 CLI 与 JSON 控制通道封装成 Agent Tools 和 HTTP API，供无限画布等工作流前端调用。",
+  "description": "Drive the open-source ArtCraft studio apps (PhotoCraft / FilmCraft / EffectCraft) from DeepSeek Harness — agent tools + a same-origin HTTP API for headless CLI runs and the JSON control channel.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "artcraft",
+    "photocraft",
+    "filmcraft",
+    "effectcraft",
+    "automation",
+    "ai-agents"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "exports": {
     ".": "./index.js",
     "./package.json": "./package.json"
@@ -11,7 +24,8 @@
   "files": [
     "index.js",
     "artcraft.config.json.example",
-    "README.md"
+    "README.md",
+    "README.zh-CN.md"
   ],
   "dsh": {
     "bundle": {

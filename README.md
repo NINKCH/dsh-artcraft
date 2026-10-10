@@ -1,96 +1,229 @@
-# @local/artcraft — ArtCraft 工具链插件（dsh-artcraft）
+<div align="center">
 
-DeepSeek Harness 插件：把 [ArtCraft](https://getartcraft.com/apps) 家族的
-**PhotoCraft**（Photoshop 对标）、**FilmCraft**(Premiere 对标)、**EffectCraft**（After Effects 对标）
-的自动化接口封装成 DSH 的 **Agent Tools** 和 **同源 HTTP API**，供「无限画布」等前端工作流调用。
+# ArtCraft Bridge
 
-- 三个工具均为纯 Rust 本地程序，官方自动化面：headless CLI、JSON 控制通道（TCP）、MCP
-- 本插件封装前两种（CLI + 控制通道），零 AI 依赖，MIT/Apache-2.0
+**Drive the open-source ArtCraft studio apps — PhotoCraft, FilmCraft, EffectCraft — from DeepSeek Harness, in chat or from your own UI.**
 
-> **更新 Host 半侧后需要重启一次 DeepSeek Harness**（Host 代码仅随重启加载）。
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-## 工作区布局与协作架构
+`@local/artcraft` · a [DeepSeek Harness](https://github.com/deepseek-ai) plugin · MIT
 
-DSH 本地插件约定：工作区根目录下**每个插件一个目录、各自带 `cordis.patch.yml`**；
-**git 仓库也放在各插件目录内**，根目录不留任何元文件：
+</div>
+
+---
+
+## Why this exists
+
+[ArtCraft](https://getartcraft.com/apps) is a family of free, open-source reinventions of Adobe's
+studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop), **FilmCraft**
+(Premiere Pro), **EffectCraft** (After Effects) and more. They share one superpower that most
+desktop apps don't have: **every menu item, slider and dialog is a command**, and the exact same
+commands can be driven from a headless CLI, a JSON control channel, or an MCP server. The apps
+were built for agents from day one.
+
+This plugin brings that surface into DeepSeek Harness, so an AI agent can *operate* the apps —
+not just talk about them:
+
+- **In chat** — four agent tools let any Harness session check the toolchain, run CLI commands,
+  send control-channel commands to a running app, and read/write files in a dedicated data root.
+- **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
+  no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
+  a node-based AI short-drama storyboard canvas, but any front end can use it.
+- **On disk** — one `dataRoot` per machine where assets, project files and rendered output live,
+  laid out per project (`media/ · craft/ · out/`), so generative pipelines and the desktop apps
+  meet on common ground.
+
+A typical AI short-drama loop looks like this: generate storyboard frames with a model →
+batch color-grade and sharpen them in PhotoCraft → render an animated title in EffectCraft →
+assemble the final cut in FilmCraft with grading, mixing and burned-in subtitles → export H.264.
+Every step after "generate" runs through this plugin, headless.
+
+## How it fits together
 
 ```
-D:\code\deepseek-plugin\
-├─ dsh-infinite_canvas/   @local/infinite-canvas   无限画布（浏览器侧 · 独立 git 仓库）
-└─ dsh-artcraft/          @local/artcraft          本插件（Host 侧 · 独立 git 仓库）
+┌──────────────── DeepSeek Harness web UI (browser) ────────────────┐
+│   e.g. infinite-canvas: ① upload assets  ② start jobs  ③ fetch   │
+└─────────────────────────────┬─────────────────────────────────────┘
+                              ▼  same-origin fetch, no CORS
+┌──────────────── DSH Host · @local/artcraft ───────────────────────┐
+│   HTTP routes /artcraft/api/*   +   agent tools artcraft_*        │
+│        → child processes (the CLIs)  →  TCP control channel       │
+└──────┬───────────────────────┬───────────────────────┬───────────┘
+       ▼                       ▼                       ▼
+  photocraft-cli          filmcraft-cli          effectcraft-cli
+  batch grading, PSD      EDL/XML in-out,        .ecproj (JSON) render,
+  headless edits          cut · grade · mix      Lottie export
+       └───────────────────────┴───────────────────────┘
+                               ▼
+              <dataRoot>/<project>/{media, craft, out}
 ```
 
-数据工作目录在仓库**之外**（渲染产物不进 git）：`<dataRoot>/<项目名>/{media,craft,out}`，
-由本插件 `artcraft.config.json` 的 `dataRoot` 配置（推荐与仓库平级，如 `D:/craft-workspace`）。
+Everything runs locally. No cloud round-trips, no accounts, no telemetry.
 
-两插件零代码耦合，协作 = 同源 HTTP + 磁盘目录约定：
+## Requirements
+
+- **DeepSeek Harness** (desktop), any platform the Harness supports.
+- **ArtCraft apps** — grab what you need from [getartcraft.com](https://getartcraft.com/apps)
+  or the [storytold GitHub releases](https://github.com/storytold). The portable/installer builds
+  ship the CLI binaries on Windows and Linux (`photocraft-cli.exe` …); macOS ships them as a
+  separate notarized zip. Versions tested: PhotoCraft 0.6, FilmCraft 0.5, EffectCraft (early).
+- Nothing else. No Python, no FFmpeg — the ArtCraft apps bring their own codecs.
+
+## Setup
+
+**1. Get the plugin onto disk** (this repository). Any folder works; keeping it inside the Harness
+workspace next to your other local plugins is the convention.
+
+**2. Register it with your Harness profile.** A Harness profile is a pnpm package at
+`C:\Users\<you>\.dsh\profiles\<profile>\` (desktop profile by default). Two edits:
+
+```jsonc
+// package.json in the profile
+{
+  "dependencies": {
+    // ...existing deps...
+    "@local/artcraft": "link:D:/code/deepseek-plugin/dsh-artcraft"   // ← path to this repo
+  },
+  "dsh": { "profile": { "bundles": [
+    // ...existing bundles...
+    "@local/artcraft"                                                // ← add the name
+  ] } }
+}
+```
+
+Then link and restart the Harness once (Host-side code loads at startup):
+
+```sh
+pnpm install --dir C:/Users/<you>/.dsh/profiles/desktop
+```
+
+> If your Harness build ships a plugin manager UI that installs from a folder, that works too —
+> it ends up writing exactly the two lines above.
+
+**3. Configure** `artcraft.config.json` next to `index.js` (copy from
+`artcraft.config.json.example`; the file is git-ignored and re-read on every request — no restart
+needed for path changes):
+
+```jsonc
+{
+  "dataRoot": "D:/craft-workspace",              // where assets & renders live
+  "bins": {
+    // three accepted forms: a directory (the <name>-cli binary is appended),
+    // a full path to the executable, or a bare name looked up on PATH
+    "photocraft":  "C:/craft/photocraft-0.6.0-windows-x64-portable",
+    "filmcraft":   "C:/craft/filmcraft-0.5.0-windows-x64-portable",
+    "effectcraft": "C:/craft/effectcraft-windows-x64-portable"
+  },
+  "control": { "filmcraft": 9876, "effectcraft": 9877 }
+}
+```
+
+**4. Verify.** In any Harness chat, ask your agent to run `artcraft_status`. Green lights across
+`bins.*.found` and you're done.
+
+## Driving it from chat
+
+The plugin registers four tools. The agent composes them, so plain language works:
+
+> *"Color-grade every PNG in `demo/media` with a soft S-curve and smart sharpening at 80, put the
+> results in `demo/out/graded`."*
+
+Behind that sentence the agent will typically do:
 
 ```
-┌──────────────── 浏览器：无限画布 client.js ────────────────┐
-│   ① 资产 Blob 落盘   ② 发任务/控制命令   ③ 取回产物入库      │
-└───────────────────────────┬──────────────────────────────┘
-                            ▼
-┌──────────────── DSH Host：@local/artcraft ─────────────────┐
-│   /artcraft/api/*  路由  +  artcraft_* Agent Tools          │
-│        → 子进程（三个 CLI） / TCP 控制通道（--control）       │
-└─────┬───────────────────┬────────────────────┬────────────┘
-      ▼                   ▼                    ▼
- photocraft-cli       filmcraft-cli       effectcraft-cli
- 批量调色/PSD          EDL/XML 导入导出     .ecproj 渲染/Lottie
+artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.json",
+                                        "--in","demo/media","--out","demo/out/graded"] }
 ```
 
-## 安装
-
-1. 下载三个 App 的 Windows portable zip，解压到固定目录（如 `C:\craft\filmcraft-0.5.0-windows-x64-portable`）。
-2. 复制 `artcraft.config.json.example` 为 `artcraft.config.json`（本文件已 gitignore），按机器改路径：
-   - `bins.*` 支持三种写法：**目录**（自动拼 `<名>-cli.exe`）、**完整 exe 路径**、**裸命令名**（搜 PATH）
-   - `dataRoot`：所有素材/工程/产物的根目录，画布按 `<dataRoot>/<项目名>/` 隔离
-   - 配置**无需重启**：每次请求都会重读
-3. 重启 Harness（加载插件本身）。
-
-## Agent Tools（对话内直接可用）
-
-| 工具 | 用途 |
+| Tool | What it does |
 |---|---|
-| `artcraft_status` | 自检：三个 CLI 是否找到、dataRoot、控制通道端口、任务列表 |
-| `artcraft_cli` | 跑任意 CLI 子命令，如 `photocraft-cli batch --actions grade.json --in raw --out graded` |
-| `artcraft_control` | 向运行中的 FilmCraft/EffectCraft 控制通道发一条命令（`engine.execute`、`ui.screenshot`…） |
-| `artcraft_fs` | dataRoot 内 list/stat/readtext/write/mkdir（准备 actions.json、取回产物） |
+| `artcraft_status` | Toolchain health check: which CLIs resolved, data root, control ports, running jobs |
+| `artcraft_cli` | Run any CLI subcommand synchronously (`photocraft-cli run/batch`, `filmcraft-cli commands`, …) |
+| `artcraft_control` | One command over the JSON control channel of a *running* FilmCraft / EffectCraft |
+| `artcraft_fs` | list / stat / read / write / mkdir inside `dataRoot` (writing `grade.json`, fetching a rendered `.ecproj`, …) |
 
-## HTTP API（同源 `/artcraft/api/*`，画布 fetch 直接调）
+## Driving it from the browser
 
-| 方法+路径 | 说明 |
+Same-origin HTTP, JSON in and out. The workhorse pattern is the **job lifecycle** — start, poll,
+fetch — which keeps long renders off the request cycle:
+
+```
+POST /artcraft/api/job      { "bin":"effectcraft",
+                              "args":["render","--comp","Main",
+                                      "--out","demo/out/intro.mp4","demo/craft/intro.ecproj"],
+                              "outputs":["demo/out/intro.mp4"] }
+                         →  { "id":"7f2c…" }
+
+GET  /artcraft/api/job?id=7f2c…&tail=30
+                         →  { "status":"running|done|failed|timeout",
+                              "stdout":"…last lines…", "stderr":"…",
+                              "outputs":[{"rel":"demo/out/intro.mp4","exists":true,"size":812345}] }
+
+GET  /artcraft/api/file?rel=demo/out/intro.mp4        → raw bytes (streamed)
+POST /artcraft/api/job/cancel  { "id":"7f2c…" }
+```
+
+Full route list:
+
+| Route | Purpose |
 |---|---|
-| `GET /artcraft/api/status` | 同 artcraft_status |
-| `GET /artcraft/api/projects` | 列出 dataRoot 下的项目目录 |
-| `GET /artcraft/api/fs?op=list\|stat\|readtext&rel=…` | 读目录/元数据/文本（xml、edl、srt…） |
-| `POST /artcraft/api/fs?action=write&rel=…` | 写文件：raw body（Blob 直传）或 JSON `{rel, base64\|text}` |
-| `GET /artcraft/api/file?rel=…` | 下载产物（raw 字节，按扩展名给 content-type） |
-| `GET /artcraft/api/job?id=…&tail=…` | 任务状态（stdout/stderr 尾部 + outputs 存在性/大小） |
-| `POST /artcraft/api/job` | 启动长任务 `{bin, args, cwdRel?, outputs?:[rel…], timeoutMs?}` |
-| `POST /artcraft/api/job/cancel` | `{id}` 取消 |
-| `POST /artcraft/api/control` | `{app\|port, method, params}` 同步控制通道调用 |
+| `GET /artcraft/api/status` | Toolchain health (same payload as `artcraft_status`) |
+| `GET /artcraft/api/projects` | Project directories under `dataRoot` |
+| `POST /artcraft/api/fs?action=write&rel=…` | Write a file — raw body (Blob upload) or JSON `{rel, text\|base64}` |
+| `GET /artcraft/api/fs?op=list\|stat\|readtext&rel=…` | Read directories, metadata, small text files |
+| `GET /artcraft/api/file?rel=…` | Download a file — streamed, up to 2 GB |
+| `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | Job lifecycle with output statting and tail logs |
+| `POST /artcraft/api/control` | Synchronous control-channel call |
 
-`outputs` 里的相对路径会在每次轮询时 stat，画布据此判断渲染完成并取回。
+Uploads are capped at 320 MB per request (Blob direct, no base64 needed for the raw path);
+downloads stream up to 2 GB. Path arguments are always relative to `dataRoot` and confined to it.
 
-## 目录约定（与无限画布的协作契约）
+## The control channel: drive a running app
 
-```
-<dataRoot>/
-  <项目名>/
-    media/          画布资产落盘（图/视频/音频，文件名用资产 id）
-    craft/          中间产物（actions.json、timeline.xml、.ecproj、edl…）
-    out/            渲染输出（成片 mp4、片头 mp4、调色后图片…）
+CLI runs are headless and one-shot. When you'd rather watch and fine-tune — grading a scene,
+scrubbing a cut — start the desktop app with its control channel and speak to it live:
+
+```sh
+filmcraft --control 9876      # or set FILMCRAFT_CONTROL_PORT; loopback only
 ```
 
-画布与 artcraft 插件之间**零代码耦合**：画布只做三件事 ——
-1) 资产 Blob → `POST /artcraft/api/fs` 落盘；2) 发任务/控制命令；3) `GET /artcraft/api/file` 取回入库。
+```jsonc
+POST /artcraft/api/control
+{ "app": "filmcraft", "method": "engine.execute",
+  "params": { "command": "timeline.place",
+              "params": { "item": 1, "track": "V1", "seconds": 0, "duration": 1270080000000 } } }
 
-## 常用配方
+// a Lumetri curve on clip 87 …
+{ "command": "effects.setParam",
+  "params": { "clip": 87, "effect": "lumetri", "param": "curve_luma",
+              "value": [[0,0],[0.25,0.21],[0.75,0.82],[1,1]] } }
 
-### PhotoCraft 批量调色（分镜图统一风格）
+// …and a look at what the app shows
+{ "method": "ui.screenshot", "params": { "path": "frame.png" } }
+```
 
-`craft/grade.json`（命令 ID 参考 `photocraft-cli` 文档/命令面板，500+ 命令）：
+Time accepts `seconds`, `frame` or `timecode` (internally FilmCraft counts ticks at
+254,016,000,000/s). `filmcraft-cli commands` lists the 650+ engine commands; the protocol is
+documented in [filmcraft/docs/control-protocol.md](https://github.com/storytold/filmcraft/blob/main/docs/control-protocol.md).
+EffectCraft listens the same way on its own port (default 9877).
+
+> PhotoCraft's control channel is an authenticated variant and is deliberately **not** proxied
+> here — for PhotoCraft the headless CLI covers everything this plugin needs.
+
+## Working with 无限画布 (infinite-canvas)
+
+The two plugins are decoupled — they meet only on HTTP and the disk layout. The canvas:
+
+1. syncs its generated assets (IndexedDB blobs) into `<project>/media/`,
+2. starts PhotoCraft/FilmCraft/EffectCraft jobs with per-project files in `<project>/craft/`,
+3. fetches finished renders from `<project>/out/` back into its asset library.
+
+If you're building a similar front end, mirror that contract: project slug as folder name, keep
+the `media · craft · out` triad, and everything composes.
+
+## Recipes
+
+**Uniform grading across storyboard frames** — `demo/craft/grade.json`:
 
 ```json
 { "actions": [
@@ -99,65 +232,49 @@ D:\code\deepseek-plugin\
 ] }
 ```
 
-```
-POST /artcraft/api/job
-{ "bin": "photocraft",
-  "args": ["batch", "--actions", "<项目>/craft/grade.json", "--in", "<项目>/media", "--out", "<项目>/out/graded"],
-  "outputs": ["<项目>/out/graded"] }
+```sh
+photocraft-cli batch --actions demo/craft/grade.json --in demo/media --out demo/out/graded
 ```
 
-### FilmCraft 成片（两条路）
+**Final cut without a browser recorder** — the canvas exports its storyboard as a
+Final Cut Pro 7 XML (`xmeml`) or CMX3600 EDL into `demo/craft/timeline.xml`; FilmCraft imports
+it, links media from `demo/media/`, and exports H.264 (hardware NVENC on Windows), ProRes, DNxHR
+with EBU R128 loudness normalization and burned-in captions. Interchange is where FilmCraft's
+automation really pays off — EDL/XML are plain text your pipeline already knows how to write.
 
-**A. 文件交换（headless，推荐）**：画布把分镜顺序/时长/字幕生成为 FCP7 XML（xmeml）
-或 CMX3600 EDL 写入 `craft/timeline.xml`，媒体落盘 `media/`，然后：
+**Animated titles as code** — EffectCraft projects (`.ecproj`) are versioned JSON, so a model can
+write one outright or fill a template. Render to MP4/ProRes — ProRes 4444 with alpha drops
+straight onto a FilmCraft track as a graphics layer — or export **Lottie** and play it inline in
+a web UI.
 
-```
-POST /artcraft/api/job
-{ "bin": "filmcraft",
-  "args": ["--project", "<项目>/craft/drama.fcproj", "--import", "<项目>/craft/timeline.xml", "--export", ...],
-  "outputs": ["<项目>/out/final.mp4"] }
-```
+## Troubleshooting
 
-> 具体子命令以 `artcraft_cli {bin:"filmcraft", args:["commands"]}` 实测为准（650+ 引擎命令可列）。
+- **`bins.*.found: false`** — check the path forms above; the CLI must exist next to the app
+  (or be on `PATH`). Changes to `artcraft.config.json` apply on the next request.
+- **404 on `/artcraft/api/*`** — the bundle isn't registered with the profile (see Setup) or the
+  Harness hasn't been restarted since registration. `artcraft_status` from chat is the quick probe.
+- **Control channel refused** — the app must be running with `--control <port>`; the channel is
+  loopback-only and unauthenticated, so nothing else will answer on that port.
+- **A job hangs** — `GET /artcraft/api/job` lists everything with logs; cancel by id. Plugin
+  reloads kill all child jobs by design.
+- **Path escape errors** — by design: every filesystem argument must resolve inside `dataRoot`.
 
-**B. 控制通道（GUI 开着 `filmcraft --control 9876`，可视化微调）**：
+## Security & trust model
 
-```jsonc
-POST /artcraft/api/control
-{ "app": "filmcraft", "method": "engine.execute",
-  "params": { "command": "timeline.place",
-              "params": { "item": 1, "track": "V1", "seconds": 0, "duration": 1270080000000 } } }
-```
+The HTTP surface has **no authentication** and rides on the Harness web server, which listens on
+loopback only — treat the port as trusted-local and don't expose it to a network; put a reverse
+proxy with auth in front if you must. Child processes are locked to the three allow-listed
+binaries; file access is locked to `dataRoot`; the control channel only ever dials `127.0.0.1`.
 
-时间可给 `seconds` / `frame` / `timecode`；调色走 `effects.setParam {effect:"lumetri",...}`；
-截图 `ui.screenshot {path}`；字幕走 caption 轨（SRT/VTT 导入+烧录）；导出走 `file.exportMedia`。
+## Publishing notes
 
-### EffectCraft 片头/花字（AI 可直接写工程）
+The package name `@local/artcraft` uses the `@local` scope for the local `link:` dependency
+convention. Before `npm publish`, rename the scope to your own (and mirror the rename in the
+profile `package.json` + `bundles` list + this repo's `cordis.patch.yml` — the three must match).
+GitHub: this repository is self-contained; `README.md` is English-first with a
+[简体中文](README.zh-CN.md) companion.
 
-`.ecproj` 是版本化 JSON —— LLM 生成或模板替换文本即可；渲染：
+## License
 
-```
-POST /artcraft/api/job
-{ "bin": "effectcraft",
-  "args": ["render", "--comp", "Main", "--out", "<项目>/out/intro.mp4", "<项目>/craft/intro.ecproj"],
-  "outputs": ["<项目>/out/intro.mp4"] }
-```
-
-也可 `POST /artcraft/api/control {app:"effectcraft", method:"engine.execute", ...}` 驱动 GUI，
-或 `exec file.exportLottie` 导出 Lottie 供画布网页内直接预览。
-
-## 边界与信任模型
-
-- **API 无鉴权**：路由挂在 DSH Web GUI（仅回环 127.0.0.1）之下，本机可信；**不要把 GUI 端口暴露到局域网**，如需远程请加反代 + 鉴权。
-- **PhotoCraft 控制通道不代理**：官方 `photocraft --control` 是鉴权模式（与 FilmCraft/EffectCraft 的无鉴权回环不同），故 `artcraft_control` 仅支持 filmcraft/effectcraft；PhotoCraft 用 CLI 足够。
-- **大小限制**：上传 320MB/次（视频资产 Blob 直传够用）；下载/取回流式传输、上限 2GB；`readtext`/文本模式 16MB。
-- **进程树终止**：`kill` 只终止 CLI 直接进程；三个 CLI 均为自包含 Rust 单体进程，无孤儿问题。
-- **EffectCraft 控制协议**假定与 FilmCraft 同族（`engine.execute`/`ui.*`），首次使用时先用 `artcraft_control {app:'effectcraft', method:'engine.commands'}` 验证。
-
-## 排错
-
-- **CLI not found**：`artcraft_status` 看 `bins.*.note`；改 `artcraft.config.json`（无需重启）。
-- **控制通道连接失败**：确认目标 App 以 `--control <port>` 启动且仅本机访问（官方协议无鉴权）。
-- **任务卡住**：`GET /artcraft/api/job`（不带 id）看全部任务；`POST /artcraft/api/job/cancel` 终止。
-- **插件没加载**：确认本目录与 `dsh-infinite_canvas` 平级、各自带 `cordis.patch.yml`，然后重启 Harness；
-  加载后对话里应能调 `artcraft_status`。
+MIT. The ArtCraft apps themselves are MIT OR Apache-2.0 — this plugin only drives their public
+automation surfaces and ships none of their code.
