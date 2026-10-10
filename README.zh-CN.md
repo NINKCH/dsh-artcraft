@@ -264,8 +264,9 @@ GitHub 上传本仓库即可：`README.md` 英文优先，附
 [简体中文](README.zh-CN.md) 对照。
 
 **发版走 npm Trusted Publishing**（GitHub Actions OIDC —— 无令牌、无 OTP）：
-`.github/workflows/publish.yml` 在 `v*` 标签推送时触发；npm 包侧的可信发布指向
-`NINKCH/dsh-artcraft` / `publish.yml`。发版流程：改 `version` → 提交 → `git tag v0.x.y && git push origin v0.x.y`。
+`.github/workflows/publish.yml` 仅在 **main 分支**的 `v*` 标签推送时触发（守卫步骤会拒绝其他分支
+的标签）；npm 包侧的可信发布指向 `NINKCH/dsh-artcraft` / `publish.yml`。发版流程与红线见
+[RELEASING.md](RELEASING.md)：改动先进 `dev` 测试，维护者明确批准后才合并 main 并打标签。
 
 ## 许可
 
