@@ -39,7 +39,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.0';
+const VERSION = '0.2.2';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = ['photocraft', 'filmcraft', 'effectcraft'];
@@ -580,6 +580,7 @@ export function apply(ctx) {
   ctx.effect(() => {
     const disposers = [];
     const attempt = (def) => {
+      const output = def.output ?? { type: 'object', additionalProperties: true };
       for (const shape of [
         { name: def.name, description: def.description, parameters: def.schema, execute: def.execute },
         { name: def.name, description: def.description, inputSchema: def.schema, handler: def.execute },
