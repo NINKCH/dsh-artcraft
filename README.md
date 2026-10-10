@@ -14,7 +14,7 @@
 
 ## Why this exists
 
-[ArtCraft](https://getartcraft.com/apps) is a family of free, open-source reinventions of Adobe's
+[ArtCraft](https://getartcraft.com/apps) is a family of free, fair-source reinventions of Adobe's
 studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop), **FilmCraft**
 (Premiere Pro), **EffectCraft** (After Effects) and more. They share one superpower that most
 desktop apps don't have: **every menu item, slider and dialog is a command**, and the exact same
@@ -276,5 +276,21 @@ GitHub: this repository is self-contained; `README.md` is English-first with a
 
 ## License
 
-MIT. The ArtCraft apps themselves are MIT OR Apache-2.0 — this plugin only drives their public
-automation surfaces and ships none of their code.
+**This plugin (`@local/artcraft`): MIT.** It ships none of the ArtCraft apps' code — it only
+drives their public automation surfaces (headless CLI + JSON control channel).
+
+**The ArtCraft apps themselves** are *not* OSI open source: they are distributed under the
+**ArtCraft License (WIP)**, a "fair source" license ([verbatim text](NOTICE.md)). The short
+version for anyone building on them:
+
+- ✅ free to use; back up, copy, modify and compile for private purposes
+- ✅ **every piece of media you create with the apps is yours** — your rendered episodes are
+  commercial assets, full stop
+- ❌ no selling the apps as your own software, no competing products built from their code
+- ❌ no stripping community/donation links from a fork; no using the ArtCraft name, logo or
+  mascots to promote a business without permission
+- 🤝 the team's public promise: if the business ever ends, the software transitions to an
+  OSI-approved open-source license
+
+Practical reading for an AI short-drama studio: run the apps locally, leave their community
+links alone, and sell your films — not the apps.

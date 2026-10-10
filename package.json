@@ -25,7 +25,8 @@
     "index.js",
     "artcraft.config.json.example",
     "README.md",
-    "README.zh-CN.md"
+    "README.zh-CN.md",
+    "NOTICE.md"
   ],
   "dsh": {
     "bundle": {
