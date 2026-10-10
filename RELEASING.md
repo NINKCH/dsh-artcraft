@@ -22,6 +22,7 @@
 - **用户侧更新路径**：插件页详情卡「一键更新」→ `pnpm add @ninkch/dsh-artcraft@latest`（强制官方源）→ 重启 Harness。
 - **开发流程相应变化**：workspace 改动不再直接生效 —— 要么走完整发版后 `pnpm add`，要么临时把 profile 依赖换回 `"link:<本仓库路径>"` 调试（调试完切回）。
 - 画布插件（`@ninkch/dsh-infinite-canvas`）暂为 link 安装：其 npm 0.17.1 落后本地两个提交，等它发新版后再切线上。
+- **红线：禁止把本地/未发布的代码直接拷进 `node_modules` 安装副本**（"弗兰肯斯坦补丁"）—— 安装的必须是 npm registry 上的真实版本；本机调试一律用临时 `link:`，调试完立即还原。
 
 ## 标准发版流程
 
