@@ -1,5 +1,6 @@
 // @ninkch/dsh-artcraft — client half.
-// 侧栏 "ArtCraft" 按钮 + 面板：工具链状态 / 自更新（检查 + 一键应用）。
+// 不占侧栏/主面板：状态与「检查更新」挂在 插件页 → 本插件详情卡 上
+// （plugins.detail.badge / plugins.detail.section）。
 window.__ModuleLoader__.load({
   id: '@ninkch/dsh-artcraft',
   factory(require) {
@@ -8,28 +9,27 @@ window.__ModuleLoader__.load({
     const { useState, useEffect, useCallback, useRef } = React;
 
     const NS = 'artcraft';
-    const PANEL_ID = 'artcraft';
     const API = '/artcraft/api';
 
     const CSS = `
-.dshac-panel { padding: 14px; font-size: 13px; line-height: 1.5; overflow: auto; height: 100%; box-sizing: border-box; }
-.dshac-h { font-size: 14px; font-weight: 600; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
-.dshac-card { border: 1px solid var(--dsw-border-primary, rgba(128,128,128,.35)); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
-.dshac-title { font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-.dshac-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
-.dshac-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dshac-card { border: 1px solid var(--dsw-border-primary, rgba(128,128,128,.35)); border-radius: 10px; padding: 12px; font-size: 13px; line-height: 1.5; }
+.dshac-title { font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dshac-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; flex-wrap: wrap; }
+.dshac-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; }
 .dshac-dot.ok { background: #34c759; } .dshac-dot.bad { background: #ff5f57; } .dshac-dot.unknown { background: #8e8e93; }
 .dshac-mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-break: break-all; }
 .dshac-muted { opacity: .65; font-size: 12px; }
 .dshac-btn { border: 1px solid var(--dsw-border-primary, rgba(128,128,128,.4)); background: transparent; color: inherit;
-  border-radius: 7px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  border-radius: 7px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
 .dshac-btn:hover:not(:disabled) { background: rgba(128,128,128,.15); }
 .dshac-btn:disabled { opacity: .5; cursor: default; }
 .dshac-btn.primary { background: rgba(80,120,255,.25); }
 .dshac-out { white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: 11px;
-  background: rgba(128,128,128,.12); border-radius: 7px; padding: 8px; margin-top: 8px; max-height: 180px; overflow: auto; }
+  background: rgba(128,128,128,.12); border-radius: 7px; padding: 8px; margin-top: 8px; max-height: 160px; overflow: auto; }
 .dshac-note { margin-top: 8px; color: var(--dsw-alias-state-warning-primary, #d69e2e); font-size: 12px; }
 .dshac-ok { color: var(--dsw-alias-state-success-primary, #34c759); }
+.dshac-chip { display: inline-flex; align-items: center; border: 1px solid rgba(80,120,255,.5); color: inherit;
+  background: rgba(80,120,255,.18); border-radius: 999px; padding: 1px 9px; font-size: 11px; }
 `;
 
     async function api(path, opts) {
@@ -43,25 +43,40 @@ window.__ModuleLoader__.load({
       } finally { if (timer) clearTimeout(timer); }
     }
 
+    /** 详情页 subject 兼容提取：判断当前详情页是否本插件 */
+    function isOurPage(props) {
+      const sub = props && props.subject ? props.subject : props;
+      if (!sub) return false;
+      const name = sub.packageName ?? sub.name ?? sub.moduleName ?? sub.id ?? (typeof sub === 'string' ? sub : '');
+      return typeof name === 'string' && name.includes('dsh-artcraft');
+    }
+
     function Dot({ ok }) {
       return h('span', { className: 'dshac-dot ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'unknown') });
     }
 
-    function PanelIcon() {
-      return h('svg', { width: 18, height: 18, viewBox: '0 0 20 20', fill: 'none' },
-        h('rect', { x: 3, y: 3, width: 14, height: 14, rx: 3, stroke: 'currentColor', 'stroke-width': 1.5 }),
-        h('path', { d: 'M6.5 10h4M8.5 8v4', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round' }),
-        h('circle', { cx: 13.5, cy: 13, r: 1.6, fill: 'currentColor' }),
-      );
+    /** 详情页标题旁的徽标：有新版本时出现 */
+    function UpdateBadge(props) {
+      const [latest, setLatest] = useState(null);
+      useEffect(() => {
+        if (!isOurPage(props)) return;
+        let ok = true;
+        api('/update/check').then((u) => { if (ok && u?.updateAvailable) setLatest(u.latest); }).catch(() => {});
+        return () => { ok = false; };
+      }, []);
+      if (!isOurPage(props) || !latest) return null;
+      return h('span', { className: 'dshac-chip', title: 'npm 上有新版本，到本页一键更新' }, '有新版本 v' + latest);
     }
 
-    function ArtCraftPage() {
+    /** 详情页内容区：工具链状态 + 更新 */
+    function StatusSection(props) {
       const [status, setStatus] = useState(null);
       const [statusErr, setStatusErr] = useState(null);
       const [upd, setUpd] = useState(null);
       const [busy, setBusy] = useState('');
       const [out, setOut] = useState('');
       const [needRestart, setNeedRestart] = useState(false);
+      const ours = isOurPage(props);
       const alive = useRef(true);
       useEffect(() => () => { alive.current = false; }, []);
 
@@ -70,10 +85,7 @@ window.__ModuleLoader__.load({
           const s = await api('/status');
           if (!alive.current) return;
           setStatus(s); setStatusErr(null);
-        } catch (e) {
-          if (!alive.current) return;
-          setStatusErr(String(e.message || e));
-        }
+        } catch (e) { if (alive.current) setStatusErr(String(e.message || e)); }
       }, []);
       const checkUpdate = useCallback(async () => {
         setBusy('check'); setOut('');
@@ -98,7 +110,12 @@ window.__ModuleLoader__.load({
         finally { if (alive.current) setBusy(''); }
       }, []);
 
-      useEffect(() => { loadStatus(); checkUpdate(); }, [loadStatus, checkUpdate]);
+      useEffect(() => {
+        if (!ours) return;
+        loadStatus(); checkUpdate();
+      }, [ours, loadStatus, checkUpdate]);
+
+      if (!ours) return null;
 
       const bins = status?.bins ?? {};
       const binRow = (key, label) => {
@@ -110,52 +127,39 @@ window.__ModuleLoader__.load({
         );
       };
 
-      return h('div', { className: 'dshac-panel' },
-        h('div', { className: 'dshac-h' }, 'ArtCraft Bridge',
-          status ? h('span', { className: 'dshac-muted' }, 'v' + status.version) : null),
-
+      return h('div', { className: 'dshac-card' },
+        h('div', { className: 'dshac-title' }, 'ArtCraft 工具链与更新',
+          h('button', { className: 'dshac-btn', onClick: loadStatus, disabled: busy !== '' }, '刷新')),
         statusErr
-          ? h('div', { className: 'dshac-card' },
-              h('div', { className: 'dshac-title' }, '未连接'),
-              h('div', { className: 'dshac-muted' }, statusErr + ' —— 插件可能未注册或 Harness 需要重启。'))
-          : h('div', { className: 'dshac-card' },
-              h('div', { className: 'dshac-title' }, '工具链',
-                h('button', { className: 'dshac-btn', onClick: loadStatus, disabled: busy !== '' }, '刷新')),
+          ? h('div', { className: 'dshac-muted' }, '未连接：' + statusErr + '（插件可能未注册或 Harness 需要重启）')
+          : h('div', null,
               binRow('photocraft', 'PhotoCraft (CLI)'),
               binRow('filmcraft', 'FilmCraft (CLI)'),
               binRow('effectcraft', 'EffectCraft (CLI)'),
               status?.dataRoot ? h('div', { className: 'dshac-row dshac-muted' },
                 '数据目录：', h('span', { className: 'dshac-mono' }, status.dataRoot.path)) : null),
-
-          h('div', { className: 'dshac-card' },
-            h('div', { className: 'dshac-title' }, '插件更新',
-              h('button', { className: 'dshac-btn primary', onClick: checkUpdate, disabled: busy !== '' },
-                busy === 'check' ? '检查中…' : '检查更新')),
-            upd
-              ? h('div', { className: 'dshac-row' },
-                  h('span', null, '当前 v' + (upd.current ?? '?')),
-                  h('span', { className: 'dshac-muted' }, '→'),
-                  h('span', { className: upd.updateAvailable ? 'dshac-ok' : 'dshac-muted' },
-                    'npm latest v' + (upd.latest ?? '—')),
-                  upd.mode ? h('span', { className: 'dshac-muted' },
-                    '（' + (upd.mode === 'git' ? 'git 仓库 · ' + (upd.branch || '?') + (upd.gitClean === false ? ' · 有本地改动' : ' · 工作区干净') : 'npm 安装') + '）') : null)
-              : h('div', { className: 'dshac-muted' }, '尚未检查'),
-            h('div', { style: { marginTop: '8px' } },
-              h('button', {
-                className: 'dshac-btn primary',
-                onClick: applyUpdate,
-                disabled: busy !== '' || !upd?.updateAvailable,
-                title: upd?.updateAvailable ? '' : '先检查更新，有新版本才可应用',
-              }, busy === 'apply' ? '更新中…' : '一键更新')),
-            needRestart ? h('div', { className: 'dshac-note' }, '更新已写入 —— 重启 DeepSeek Harness 后生效。') : null,
-            out ? h('div', { className: 'dshac-out' }, out) : null),
+        h('div', { className: 'dshac-row', style: { marginTop: '10px' } },
+          h('span', { className: 'dshac-muted' },
+            '当前 v' + (status?.version ?? upd?.current ?? '?') +
+            (upd ? ' · npm latest v' + (upd.latest ?? '—') : '') +
+            (upd?.mode ? '（' + (upd.mode === 'git' ? 'git 仓库' + (upd.gitClean === false ? ' · 有本地改动' : '') : 'npm 安装') + '）' : '')),
+          h('button', { className: 'dshac-btn primary', onClick: checkUpdate, disabled: busy !== '' },
+            busy === 'check' ? '检查中…' : '检查更新'),
+          h('button', {
+            className: 'dshac-btn',
+            onClick: applyUpdate,
+            disabled: busy !== '' || !upd?.updateAvailable,
+            title: upd?.updateAvailable ? '' : '有新版本时才可应用',
+          }, busy === 'apply' ? '更新中…' : '一键更新')),
+        needRestart ? h('div', { className: 'dshac-note' }, '更新已写入 —— 重启 DeepSeek Harness 后生效。') : null,
+        out ? h('div', { className: 'dshac-out' }, out) : null,
       );
     }
 
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
-        ctx.effect(() => ctx.locale.register(NS, { zh: { panel: 'ArtCraft' }, en: { panel: 'ArtCraft' } }), 'artcraft: dictionaries');
+        ctx.effect(() => ctx.locale.register(NS, { zh: { artcraft: 'ArtCraft' }, en: { artcraft: 'ArtCraft' } }), 'artcraft: dictionaries');
         ctx.effect(() => {
           const el = document.createElement('style');
           el.id = 'dshac-styles';
@@ -163,18 +167,22 @@ window.__ModuleLoader__.load({
           document.head.appendChild(el);
           return () => el.remove();
         }, 'artcraft: styles');
-        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-          name: 'sidebar.panellist',
-          id: PANEL_ID,
-          order: 101,
-          label: () => 'ArtCraft',
+        // 插件页 → 本插件详情卡：标题旁徽标（有新版本时）
+        ctx.slots.inject('plugins.detail.badge', () => ctx.slots.register({
+          name: 'plugins.detail.badge',
+          id: 'artcraft-update-badge',
+          order: 50,
+          label: () => 'ArtCraft 更新',
           locale: NS,
-        }, PanelIcon));
-        ctx.slots.inject('main', () => ctx.slots.register({
-          name: 'main',
-          key: PANEL_ID,
+        }, UpdateBadge));
+        // 插件页 → 本插件详情卡：内容区（工具链状态 + 检测更新 + 一键更新）
+        ctx.slots.inject('plugins.detail.section', () => ctx.slots.register({
+          name: 'plugins.detail.section',
+          id: 'artcraft-status',
+          order: 50,
+          label: () => 'ArtCraft 工具链与更新',
           locale: NS,
-        }, ArtCraftPage));
+        }, StatusSection));
       },
     };
   },
