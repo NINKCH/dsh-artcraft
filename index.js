@@ -39,10 +39,10 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.3';
+const VERSION = '0.2.4';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-const BINS = ['photocraft', 'filmcraft', 'effectcraft'];
+const BINS = ['photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft', 'designcraft'];
 const PKG_NAME = '@ninkch/dsh-artcraft';
 const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877 };
 
@@ -58,8 +58,12 @@ const DEFAULT_CONFIG = {
   dataRoot: path.join(os.homedir(), 'craft-workspace'),
   bins: {
     photocraft: 'photocraft-cli',
+    vectorcraft: 'vectorcraft-cli',
     filmcraft: 'filmcraft-cli',
+    lightcraft: 'lightcraft-cli',
+    pdfcraft: 'pdfcraft-cli',
     effectcraft: 'effectcraft-cli',
+    designcraft: 'designcraft-cli',
   },
   control: { ...DEFAULT_PORTS },
 };

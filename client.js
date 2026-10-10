@@ -1,6 +1,11 @@
 // @ninkch/dsh-artcraft — client half.
-// 不占侧栏/主面板：状态与「检查更新」挂在 插件页 → 本插件详情卡 上
-// （plugins.detail.badge / plugins.detail.section）。
+// 不占侧栏/主面板：状态与「检查更新 / 一键更新」挂在
+// 插件页 → 本插件详情卡（plugins.bundle.config，按包名键控分发）。
+//
+// 更新语义（吸取画布侧教训）：
+//   - 只做版本号对比（npm latest vs 本地），本地领先不算待更新；
+//   - 更新完成后只显示提示文字，绝不自动刷新/重启页面 —— 何时生效由你决定
+//     （本插件是 Host 半侧代码，生效需要重启 Harness 进程，刷新页面不够）。
 window.__ModuleLoader__.load({
   id: '@ninkch/dsh-artcraft',
   factory(require) {
@@ -10,6 +15,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'artcraft';
     const API = '/artcraft/api';
+    const LABELS = { photocraft: 'PhotoCraft', vectorcraft: 'VectorCraft', filmcraft: 'FilmCraft', lightcraft: 'LightCraft', pdfcraft: 'PdfCraft', effectcraft: 'EffectCraft', designcraft: 'DesignCraft' };
 
     const CSS = `
 .dshac-card { border: 1px solid var(--dsw-border-primary, rgba(128,128,128,.35)); border-radius: 10px; padding: 12px; font-size: 13px; line-height: 1.5; }
@@ -28,8 +34,6 @@ window.__ModuleLoader__.load({
   background: rgba(128,128,128,.12); border-radius: 7px; padding: 8px; margin-top: 8px; max-height: 160px; overflow: auto; }
 .dshac-note { margin-top: 8px; color: var(--dsw-alias-state-warning-primary, #d69e2e); font-size: 12px; }
 .dshac-ok { color: var(--dsw-alias-state-success-primary, #34c759); }
-.dshac-chip { display: inline-flex; align-items: center; border: 1px solid rgba(80,120,255,.5); color: inherit;
-  background: rgba(80,120,255,.18); border-radius: 999px; padding: 1px 9px; font-size: 11px; }
 `;
 
     async function api(path, opts) {
@@ -43,87 +47,70 @@ window.__ModuleLoader__.load({
       } finally { if (timer) clearTimeout(timer); }
     }
 
-    /** 详情页 subject 兼容提取：判断当前详情页是否本插件 */
-    function isOurPage(props) {
-      const sub = props && props.subject ? props.subject : props;
-      if (!sub) return false;
-      const name = sub.packageName ?? sub.name ?? sub.moduleName ?? sub.id ?? (typeof sub === 'string' ? sub : '');
-      return typeof name === 'string' && name.includes('dsh-artcraft');
-    }
-
     function Dot({ ok }) {
       return h('span', { className: 'dshac-dot ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'unknown') });
     }
 
-    /** 详情页标题旁的徽标：有新版本时出现 */
-    function UpdateBadge(props) {
-      const [latest, setLatest] = useState(null);
-      useEffect(() => {
-        if (!isOurPage(props)) return;
-        let ok = true;
-        api('/update/check').then((u) => { if (ok && u?.updateAvailable) setLatest(u.latest); }).catch(() => {});
-        return () => { ok = false; };
-      }, []);
-      if (!isOurPage(props) || !latest) return null;
-      return h('span', { className: 'dshac-chip', title: 'npm 上有新版本，到本页一键更新' }, '有新版本 v' + latest);
-    }
-
-    /** 详情页内容区：工具链状态 + 更新 */
-    function StatusSection(props) {
+    function StatusCard() {
       const [status, setStatus] = useState(null);
       const [statusErr, setStatusErr] = useState(null);
       const [upd, setUpd] = useState(null);
       const [busy, setBusy] = useState('');
       const [out, setOut] = useState('');
-      const [needRestart, setNeedRestart] = useState(false);
-      const ours = isOurPage(props);
+      const [done, setDone] = useState(false);
       const alive = useRef(true);
       useEffect(() => () => { alive.current = false; }, []);
 
       const loadStatus = useCallback(async () => {
         try {
           const s = await api('/status');
-          if (!alive.current) return;
-          setStatus(s); setStatusErr(null);
+          if (alive.current) { setStatus(s); setStatusErr(null); }
         } catch (e) { if (alive.current) setStatusErr(String(e.message || e)); }
       }, []);
+
       const checkUpdate = useCallback(async () => {
-        setBusy('check'); setOut('');
+        setBusy('check'); setOut(''); setDone(false);
         try {
           const u = await api('/update/check');
           if (!alive.current) return;
           setUpd(u);
           setOut(u.updateAvailable
-            ? `有新版本：${u.latest}（当前 ${u.current}），安装方式：${u.mode === 'git' ? 'git 仓库' : 'npm 安装'}`
-            : `已是最新${u.latest ? '（npm latest ' + u.latest + '）' : ''}${u.note ? ' · ' + u.note : ''}`);
+            ? `有新版本：v${u.latest}（当前 v${u.current}），安装方式：${u.mode === 'git' ? 'git 仓库' : 'npm 安装'}`
+            : `已是最新${u.latest ? '（npm latest v' + u.latest + '）' : ''}${u.note ? ' · ' + u.note : ''}`);
         } catch (e) { if (alive.current) setOut('检查失败：' + String(e.message || e)); }
         finally { if (alive.current) setBusy(''); }
       }, []);
+
       const applyUpdate = useCallback(async () => {
-        setBusy('apply'); setOut('');
+        setBusy('apply'); setOut(''); setDone(false);
         try {
           const r = await api('/update/apply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
           if (!alive.current) return;
-          setOut((r.output || String(r.message || '')) + (r.needRestart ? '\n\n✅ 更新完成 —— 请重启 DeepSeek Harness 后生效。' : ''));
-          if (r.needRestart) setNeedRestart(true);
+          setOut((r.output || String(r.message || '')));
+          // 不自动刷新/重启任何东西：本插件是 Host 半侧代码，生效 = 重启 Harness 进程
+          if (r.needRestart) {
+            setDone(true);
+            setOut((r.output || '') + '\n\n✅ 更新已写入磁盘。生效方式：重启 DeepSeek Harness（进程级重启，页面刷新不够）。何时重启由你决定。');
+          }
         } catch (e) { if (alive.current) setOut('更新失败：' + String(e.message || e)); }
         finally { if (alive.current) setBusy(''); }
       }, []);
 
-      useEffect(() => {
-        if (!ours) return;
-        loadStatus(); checkUpdate();
-      }, [ours, loadStatus, checkUpdate]);
-
-      if (!ours) return null;
+      useEffect(() => { loadStatus(); checkUpdate(); }, [loadStatus, checkUpdate]);
 
       const bins = status?.bins ?? {};
-      const binRow = (key, label) => {
+      const binRow = (key) => {
         const b = bins[key];
+        const label = LABELS[key] || key;
+        if (!b) return h('div', { className: 'dshac-row' }, h(Dot, { ok: null }), h('span', null, label), h('span', { className: 'dshac-muted' }, '未配置'));
+        const unconfigured = b.configured === key + '-cli' && !b.found; // 从未配置过的默认裸名
+        const ok = unconfigured ? null : b.found;
         return h('div', { className: 'dshac-row' },
-          h(Dot, { ok: b ? b.found : null }),
+          h(Dot, { ok }),
           h('span', null, label),
-          b?.found ? null : h('span', { className: 'dshac-muted' }, b?.note || '未配置'),
+          b.found ? h('span', { className: 'dshac-ok' }, '就绪')
+            : unconfigured ? h('span', { className: 'dshac-muted' }, '未安装（可选家族成员）')
+            : h('span', { className: 'dshac-muted' }, b.note || '未找到'),
         );
       };
 
@@ -132,10 +119,7 @@ window.__ModuleLoader__.load({
           h('button', { className: 'dshac-btn', onClick: loadStatus, disabled: busy !== '' }, '刷新')),
         statusErr
           ? h('div', { className: 'dshac-muted' }, '未连接：' + statusErr + '（插件可能未注册或 Harness 需要重启）')
-          : h('div', null,
-              binRow('photocraft', 'PhotoCraft (CLI)'),
-              binRow('filmcraft', 'FilmCraft (CLI)'),
-              binRow('effectcraft', 'EffectCraft (CLI)'),
+          : h('div', null, Object.keys(LABELS).map(binRow),
               status?.dataRoot ? h('div', { className: 'dshac-row dshac-muted' },
                 '数据目录：', h('span', { className: 'dshac-mono' }, status.dataRoot.path)) : null),
         h('div', { className: 'dshac-row', style: { marginTop: '10px' } },
@@ -151,7 +135,8 @@ window.__ModuleLoader__.load({
             disabled: busy !== '' || !upd?.updateAvailable,
             title: upd?.updateAvailable ? '' : '有新版本时才可应用',
           }, busy === 'apply' ? '更新中…' : '一键更新')),
-        needRestart ? h('div', { className: 'dshac-note' }, '更新已写入 —— 重启 DeepSeek Harness 后生效。') : null,
+        done ? h('div', { className: 'dshac-note' },
+          '更新已写入磁盘。生效方式：重启 DeepSeek Harness（进程级重启，页面刷新不够）。何时重启由你决定 —— 更新不会打断正在运行的任务。') : null,
         out ? h('div', { className: 'dshac-out' }, out) : null,
       );
     }
@@ -167,22 +152,12 @@ window.__ModuleLoader__.load({
           document.head.appendChild(el);
           return () => el.remove();
         }, 'artcraft: styles');
-        // 插件页 → 本插件详情卡：标题旁徽标（有新版本时）
-        ctx.slots.inject('plugins.detail.badge', () => ctx.slots.register({
-          name: 'plugins.detail.badge',
-          id: 'artcraft-update-badge',
-          order: 50,
-          label: () => 'ArtCraft 更新',
+        // 键控分发：key = 包名 → 只渲染在 @ninkch/dsh-artcraft 自己的插件页详情卡上
+        ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+          name: 'plugins.bundle.config',
+          key: '@ninkch/dsh-artcraft',
           locale: NS,
-        }, UpdateBadge));
-        // 插件页 → 本插件详情卡：内容区（工具链状态 + 检测更新 + 一键更新）
-        ctx.slots.inject('plugins.detail.section', () => ctx.slots.register({
-          name: 'plugins.detail.section',
-          id: 'artcraft-status',
-          order: 50,
-          label: () => 'ArtCraft 工具链与更新',
-          locale: NS,
-        }, StatusSection));
+        }, StatusCard));
       },
     };
   },
