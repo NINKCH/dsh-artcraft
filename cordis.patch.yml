@@ -1,4 +1,4 @@
 - insert:
     - id: artcraft
-      name: '@local/artcraft'
+      name: '@ninkch/artcraft'
       config: {}

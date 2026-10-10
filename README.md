@@ -6,7 +6,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`@local/artcraft` · a [DeepSeek Harness](https://github.com/deepseek-ai) plugin · Apache-2.0
+`@ninkch/artcraft` · a [DeepSeek Harness](https://github.com/deepseek-ai) plugin · Apache-2.0
 
 </div>
 
@@ -45,7 +45,7 @@ Every step after "generate" runs through this plugin, headless.
 │   e.g. infinite-canvas: ① upload assets  ② start jobs  ③ fetch   │
 └─────────────────────────────┬─────────────────────────────────────┘
                               ▼  same-origin fetch, no CORS
-┌──────────────── DSH Host · @local/artcraft ───────────────────────┐
+┌──────────────── DSH Host · @ninkch/artcraft ──────────────────────┐
 │   HTTP routes /artcraft/api/*   +   agent tools artcraft_*        │
 │        → child processes (the CLIs)  →  TCP control channel       │
 └──────┬───────────────────────┬───────────────────────┬───────────┘
@@ -82,11 +82,13 @@ workspace next to your other local plugins is the convention.
 {
   "dependencies": {
     // ...existing deps...
-    "@local/artcraft": "link:D:/code/deepseek-plugin/dsh-artcraft"   // ← path to this repo
+    "@ninkch/artcraft": "^0.1.1",                                    // ← from npm
+    // or, for local development, a link into this repository:
+    // "@ninkch/artcraft": "link:D:/code/deepseek-plugin/dsh-artcraft"
   },
   "dsh": { "profile": { "bundles": [
     // ...existing bundles...
-    "@local/artcraft"                                                // ← add the name
+    "@ninkch/artcraft"                                               // ← add the name
   ] } }
 }
 ```
@@ -266,17 +268,21 @@ loopback only — treat the port as trusted-local and don't expose it to a netwo
 proxy with auth in front if you must. Child processes are locked to the three allow-listed
 binaries; file access is locked to `dataRoot`; the control channel only ever dials `127.0.0.1`.
 
-## Publishing notes
+## Publishing
 
-The package name `@local/artcraft` uses the `@local` scope for the local `link:` dependency
-convention. Before `npm publish`, rename the scope to your own (and mirror the rename in the
-profile `package.json` + `bundles` list + this repo's `cordis.patch.yml` — the three must match).
+This plugin is published to npm as **`@ninkch/artcraft`** (scoped packages publish with
+`npm publish --access public`). To consume it, add the package name to your Harness profile's
+`dependencies` and `dsh.profile.bundles` (see Setup) — `pnpm install` in the profile does the
+rest. For local development, swap the dependency for a `"link:<path-to-this-repo>"` instead.
+The three places that must agree on the package name are the profile `package.json`
+(dependency + bundles) and this repo's `cordis.patch.yml`.
+
 GitHub: this repository is self-contained; `README.md` is English-first with a
 [简体中文](README.zh-CN.md) companion.
 
 ## License
 
-**This plugin (`@local/artcraft`): Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
+**This plugin (`@ninkch/artcraft`): Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
 ArtCraft apps' code — it only drives their public automation surfaces (headless CLI + JSON
 control channel).
 

@@ -1,5 +1,5 @@
 {
-  "name": "@local/artcraft",
+  "name": "@ninkch/artcraft",
   "version": "0.1.1",
   "type": "module",
   "description": "Drive the open-source ArtCraft studio apps (PhotoCraft / FilmCraft / EffectCraft) from DeepSeek Harness — agent tools + a same-origin HTTP API for headless CLI runs and the JSON control channel.",
@@ -23,6 +23,7 @@
   },
   "files": [
     "index.js",
+    "cordis.patch.yml",
     "artcraft.config.json.example",
     "README.md",
     "README.zh-CN.md",
