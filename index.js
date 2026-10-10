@@ -562,9 +562,9 @@ async function updateApply() {
   const tools = await findRuntimeTools();
   let cmd, args;
   if (tools.pnpmCmd) {
-    cmd = tools.pnpmCmd; args = ['add', `${PKG_NAME}@latest`, '--dir', info.profileDir];
+    cmd = tools.pnpmCmd; args = ['add', `${PKG_NAME}@latest`, '--dir', info.profileDir, '--registry=https://registry.npmjs.org'];
   } else if (tools.pnpmMjs) {
-    cmd = tools.nodeExe; args = [tools.pnpmMjs, 'add', `${PKG_NAME}@latest`, '--dir', info.profileDir];
+    cmd = tools.nodeExe; args = [tools.pnpmMjs, 'add', `${PKG_NAME}@latest`, '--dir', info.profileDir, '--registry=https://registry.npmjs.org'];
   } else {
     throw new Error('未找到 pnpm（PATH 与 ~/.dsh/dsh-runtimes 均未命中），请手动在 profile 目录执行 pnpm add');
   }

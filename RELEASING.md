@@ -16,6 +16,13 @@
 
 版本号遵循语义化：修 bug 递 patch（0.2.x）、加功能递 minor（0.x.0）、破坏性变更递 major（x.0.0）。
 
+## 安装形态（2026-10-10 起：本机已切 npm 线上安装）
+
+- 本机 profile（`~/.dsh/profiles/desktop`）的依赖是 `"@ninkch/dsh-artcraft": "^0.2.4"` —— **npm 实体安装**，profile 内有 `.npmrc` 钉死官方源。
+- **用户侧更新路径**：插件页详情卡「一键更新」→ `pnpm add @ninkch/dsh-artcraft@latest`（强制官方源）→ 重启 Harness。
+- **开发流程相应变化**：workspace 改动不再直接生效 —— 要么走完整发版后 `pnpm add`，要么临时把 profile 依赖换回 `"link:<本仓库路径>"` 调试（调试完切回）。
+- 画布插件（`@ninkch/dsh-infinite-canvas`）暂为 link 安装：其 npm 0.17.1 落后本地两个提交，等它发新版后再切线上。
+
 ## 标准发版流程
 
 1. 在 `dev` 完成改动并自测：
