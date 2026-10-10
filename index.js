@@ -1,5 +1,5 @@
 /**
- * @ninkch/artcraft — DeepSeek Harness 插件（Host 半侧）
+ * @ninkch/dsh-artcraft — DeepSeek Harness 插件（Host 半侧）
  *
  * 把 ArtCraft 家族的自动化接口封装成两种形态：
  *   1) Agent Tools（对话内直接驱动）:

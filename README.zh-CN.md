@@ -6,7 +6,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`@ninkch/artcraft` · DeepSeek Harness 插件 · Apache-2.0
+`@ninkch/dsh-artcraft` · DeepSeek Harness 插件 · Apache-2.0
 
 </div>
 
@@ -41,7 +41,7 @@ FilmCraft 剪辑、调色、混音、烧字幕 → 导出 H.264。"生成"之后
 │   以无限画布为例：① 上传资产  ② 发起任务  ③ 取回产物              │
 └─────────────────────────────┬───────────────────────────────────┘
                               ▼  同源 fetch，无 CORS
-┌──────────────── DSH Host · @ninkch/artcraft ──────────────────────┐
+┌──────────────── DSH Host · @ninkch/dsh-artcraft ────────────────┐
 │   HTTP 路由 /artcraft/api/*   +   Agent 工具 artcraft_*           │
 │        → 子进程（各 CLI）        → TCP 控制通道                     │
 └──────┬───────────────────────┬───────────────────────┬───────────┘
@@ -77,13 +77,13 @@ FilmCraft 剪辑、调色、混音、烧字幕 → 导出 H.264。"生成"之后
 {
   "dependencies": {
     // ...已有依赖...
-    "@ninkch/artcraft": "^0.1.1",                                    // ← 来自 npm
+    "@ninkch/dsh-artcraft": "^0.1.1",                                    // ← 来自 npm
     // 或者，本地开发时用 link 指向本仓库：
-    // "@ninkch/artcraft": "link:D:/code/deepseek-plugin/dsh-artcraft"
+    // "@ninkch/dsh-artcraft": "link:D:/code/deepseek-plugin/dsh-artcraft"
   },
   "dsh": { "profile": { "bundles": [
     // ...已有 bundles...
-    "@ninkch/artcraft"                                               // ← 加入白名单
+    "@ninkch/dsh-artcraft"                                               // ← 加入白名单
   ] } }
 }
 ```
@@ -254,7 +254,7 @@ HTTP 面无鉴权，挂在 Harness Web 服务之下（仅回环监听）—— �
 
 ## 发布
 
-本插件已发布到 npm：**[`@ninkch/artcraft`](https://www.npmjs.com/package/@ninkch/artcraft)**
+本插件已发布到 npm：**[`@ninkch/dsh-artcraft`](https://www.npmjs.com/package/@ninkch/dsh-artcraft)**
 （带 scope 的包发布时需要 `npm publish --access public`）。使用时把包名加进 Harness profile 的
 `dependencies` 与 `dsh.profile.bundles`（见"安装"），profile 里跑一次 `pnpm install` 即可。
 本地开发则把依赖换成 `"link:<本仓库路径>"`。包名必须一致的三处：profile 的 `package.json`
@@ -265,7 +265,7 @@ GitHub 上传本仓库即可：`README.md` 英文优先，附
 
 ## 许可
 
-**本插件（`@ninkch/artcraft`）：Apache-2.0**（见 [LICENSE](LICENSE)）。不包含 ArtCraft 应用的任何代码 —— 只调用其公开自动化面
+**本插件（`@ninkch/dsh-artcraft`）：Apache-2.0**（见 [LICENSE](LICENSE)）。不包含 ArtCraft 应用的任何代码 —— 只调用其公开自动化面
 （无头 CLI + JSON 控制通道）。
 
 **ArtCraft 各应用本身并非 OSI 开源**：它们采用 **ArtCraft License (WIP)** —— 一种 "fair source"

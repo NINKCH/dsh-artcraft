@@ -6,7 +6,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`@ninkch/artcraft` · a [DeepSeek Harness](https://github.com/deepseek-ai) plugin · Apache-2.0
+`@ninkch/dsh-artcraft` · a [DeepSeek Harness](https://github.com/deepseek-ai) plugin · Apache-2.0
 
 </div>
 
@@ -45,7 +45,7 @@ Every step after "generate" runs through this plugin, headless.
 │   e.g. infinite-canvas: ① upload assets  ② start jobs  ③ fetch   │
 └─────────────────────────────┬─────────────────────────────────────┘
                               ▼  same-origin fetch, no CORS
-┌──────────────── DSH Host · @ninkch/artcraft ──────────────────────┐
+┌──────────────── DSH Host · @ninkch/dsh-artcraft ────────────────┐
 │   HTTP routes /artcraft/api/*   +   agent tools artcraft_*        │
 │        → child processes (the CLIs)  →  TCP control channel       │
 └──────┬───────────────────────┬───────────────────────┬───────────┘
@@ -82,13 +82,13 @@ workspace next to your other local plugins is the convention.
 {
   "dependencies": {
     // ...existing deps...
-    "@ninkch/artcraft": "^0.1.1",                                    // ← from npm
+    "@ninkch/dsh-artcraft": "^0.1.1",                                    // ← from npm
     // or, for local development, a link into this repository:
-    // "@ninkch/artcraft": "link:D:/code/deepseek-plugin/dsh-artcraft"
+    // "@ninkch/dsh-artcraft": "link:D:/code/deepseek-plugin/dsh-artcraft"
   },
   "dsh": { "profile": { "bundles": [
     // ...existing bundles...
-    "@ninkch/artcraft"                                               // ← add the name
+    "@ninkch/dsh-artcraft"                                               // ← add the name
   ] } }
 }
 ```
@@ -270,7 +270,7 @@ binaries; file access is locked to `dataRoot`; the control channel only ever dia
 
 ## Publishing
 
-This plugin is published to npm as **`@ninkch/artcraft`** (scoped packages publish with
+This plugin is published to npm as **`@ninkch/dsh-artcraft`** (scoped packages publish with
 `npm publish --access public`). To consume it, add the package name to your Harness profile's
 `dependencies` and `dsh.profile.bundles` (see Setup) — `pnpm install` in the profile does the
 rest. For local development, swap the dependency for a `"link:<path-to-this-repo>"` instead.
@@ -282,7 +282,7 @@ GitHub: this repository is self-contained; `README.md` is English-first with a
 
 ## License
 
-**This plugin (`@ninkch/artcraft`): Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
+**This plugin (`@ninkch/dsh-artcraft`): Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
 ArtCraft apps' code — it only drives their public automation surfaces (headless CLI + JSON
 control channel).
 
