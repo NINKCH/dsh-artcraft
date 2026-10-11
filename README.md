@@ -55,7 +55,8 @@ Every step after "generate" runs through this plugin, headless.
   headless edits          cut · grade · mix      Lottie export
        └───────────────────────┴───────────────────────┘
                                ▼
-              <dataRoot>/<project>/{media, craft, out}
+              caller-decided locations (chat → conversation
+              workspace · canvas → its project folder)
 ```
 
 Everything runs locally. No cloud round-trips, no accounts, no telemetry.
