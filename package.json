@@ -1,6 +1,6 @@
 {
   "name": "@ninkch/dsh-artcraft",
-  "version": "0.2.9",
+  "version": "0.2.8",
   "type": "module",
   "description": "Drive the open-source ArtCraft studio apps (PhotoCraft / FilmCraft / EffectCraft) from DeepSeek Harness ? agent tools, a same-origin HTTP API, and plugins-page status with self-update.",
   "keywords": [
