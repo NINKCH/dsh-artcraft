@@ -120,8 +120,8 @@ window.__ModuleLoader__.load({
         statusErr
           ? h('div', { className: 'dshac-muted' }, '未连接：' + statusErr + '（插件可能未注册或 Harness 需要重启）')
           : h('div', null, Object.keys(LABELS).map(binRow),
-              status?.dataRoot ? h('div', { className: 'dshac-row dshac-muted' },
-                '数据目录：', h('span', { className: 'dshac-mono' }, status.dataRoot.path)) : null),
+              status?.config?.path ? h('div', { className: 'dshac-row dshac-muted' },
+                '配置目录：', h('span', { className: 'dshac-mono' }, status.config.path)) : null),
         h('div', { className: 'dshac-row', style: { marginTop: '10px' } },
           h('span', { className: 'dshac-muted' },
             '当前 v' + (status?.version ?? upd?.current ?? '?') +

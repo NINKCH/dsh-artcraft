@@ -1,9 +1,12 @@
 {
-  "dataRoot": "D:/craft-workspace",
   "bins": {
-    "photocraft": "C:/craft/photocraft-0.6.0-windows-x64-portable",
-    "filmcraft": "C:/craft/filmcraft-0.5.0-windows-x64-portable",
-    "effectcraft": "C:/craft/effectcraft-0.1.0-windows-x64-portable"
+    "photocraft": "D:/craft/photocraft-0.6.0/photocraft-0.6.0-windows-x64-portable",
+    "vectorcraft": "C:/Program Files/VectorCraft",
+    "filmcraft": "D:/craft/filmcraft-0.5.0/filmcraft-0.5.0-windows-x64-portable",
+    "lightcraft": "C:/Program Files/LightCraft",
+    "pdfcraft": "C:/Program Files/PdfCraft",
+    "effectcraft": "C:/Program Files/EffectCraft",
+    "designcraft": "C:/Program Files/DesignCraft"
   },
   "control": {
     "filmcraft": 9876,

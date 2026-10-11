@@ -1,15 +1,20 @@
 /**
  * @ninkch/dsh-artcraft — DeepSeek Harness 插件（Host 半侧）
  *
- * 把 ArtCraft 家族的自动化接口封装成两种形态：
+ * 本插件只是【桥接】：把 ArtCraft 家族软件的自动化接口转接给 Harness，不持有任何数据目录。
+ * 结果文件的位置由调用方决定 ——
+ *   对话调用：当前对话工作空间下的绝对路径（或提示词指定的任意位置）
+ *   画布调用：画布项目目录下的绝对路径（哪个项目使用就放哪个项目下）
+ *
+ * 两种形态：
  *   1) Agent Tools（对话内直接驱动）:
- *        artcraft_status  —— 检查三个 CLI 是否可用、数据目录、控制通道配置
- *        artcraft_cli     —— 运行 photocraft-cli / filmcraft-cli / effectcraft-cli 任意命令
+ *        artcraft_status  —— 检查 7 个家族 CLI 是否可用、配置目录、控制通道配置
+ *        artcraft_cli     —— 运行 7 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
  *        artcraft_control —— 向运行中的 FilmCraft/EffectCraft JSON 控制通道发一条命令
- *        artcraft_fs      —— 在 dataRoot 内读写文件（准备 actions.json / 取回产物）
+ *        artcraft_fs      —— 桥接文件操作（list/stat/readtext/write/mkdir，绝对路径）
+ *        artcraft_update  —— 插件自身更新（检查/应用）
  *   2) HTTP API（同源 /artcraft/api/*，供无限画布等前端调用，无 CORS 问题）:
  *        GET  /artcraft/api/status     环境自检
- *        GET  /artcraft/api/projects   列出 dataRoot 下的项目目录
  *        GET  /artcraft/api/fs         list / stat / readtext
  *        POST /artcraft/api/fs         write（JSON base64/text 或原始字节流）
  *        GET  /artcraft/api/file       下载产物（流式，raw 或 text）
@@ -19,12 +24,10 @@
  *        POST /artcraft/api/control    控制通道同步调用（engine.execute / ui.*）
  *
  * 安全约定：
- *   - 所有文件操作限制在 dataRoot 内（拒绝 .. 越界与绝对路径外逃）；
- *   - 子进程只允许三个白名单键（photocraft/filmcraft/effectcraft），
- *     具体可执行文件由 artcraft.config.json 指定；
+ *   - 子进程只允许 7 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
  *   - 控制通道只连 127.0.0.1，与 ArtCraft 官方协议一致（App 需以 --control 启动；
  *     PhotoCraft 的控制通道为鉴权模式，本插件不代理，故仅支持 filmcraft/effectcraft）；
- *   - 本插件与 infinite-canvas 零代码耦合，仅通过 HTTP + 磁盘目录约定协作。
+ *   - 本插件与 infinite-canvas 零代码耦合，仅通过 HTTP + 调用方给定路径协作。
  *
  * 信任模型：HTTP API 无鉴权，随 DSH Web GUI 仅监听回环；不要把 GUI 端口暴露到局域网。
  */
@@ -39,7 +42,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.6';
+const VERSION = '0.3.0';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = ['photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft', 'designcraft'];
@@ -55,7 +58,6 @@ const LINE_CAP = 4000;                       // 单行截断
 const KEEP_JOBS = 64;                        // 已结束任务保留条数
 
 const DEFAULT_CONFIG = {
-  dataRoot: path.join(os.homedir(), 'craft-workspace'),
   bins: {
     photocraft: 'photocraft-cli',
     vectorcraft: 'vectorcraft-cli',
@@ -72,9 +74,9 @@ const DEFAULT_CONFIG = {
 
 async function loadConfig() {
   const cfg = {
-    dataRoot: DEFAULT_CONFIG.dataRoot,
     bins: { ...DEFAULT_CONFIG.bins },
     control: { ...DEFAULT_PORTS },
+    configPath: null, // 实际生效的配置文件（供界面显示"配置目录"）
   };
   // 配置查找顺序：~/.dsh（持久，推荐 —— 更新替换包目录也不丢）→ 包目录（旧版兼容）
   const candidates = [
@@ -84,7 +86,6 @@ async function loadConfig() {
   for (const candidate of candidates) {
     try {
       const user = JSON.parse(await fs.readFile(candidate, 'utf8'));
-      if (user && typeof user.dataRoot === 'string' && user.dataRoot) cfg.dataRoot = user.dataRoot;
       if (user && user.bins) {
         for (const k of BINS) {
           if (typeof user.bins[k] === 'string' && user.bins[k]) cfg.bins[k] = user.bins[k];
@@ -96,6 +97,7 @@ async function loadConfig() {
           if (Number.isInteger(p) && p > 0 && p < 65536) cfg.control[k] = p;
         }
       }
+      cfg.configPath = candidate;
       break; // 第一个可解析的配置生效
     } catch { /* 该候选不存在/非法 → 试下一个 */ }
   }
@@ -104,20 +106,36 @@ async function loadConfig() {
 
 /* ============================ 路径与进程 ============================ */
 
-/** 把 rel 解析为 dataRoot 内的绝对路径，拒绝越界 */
-function resolveSafeRel(dataRoot, rel) {
-  const root = path.resolve(String(dataRoot));
-  const p = path.resolve(root, String(rel ?? '.'));
-  if (p !== root && !p.startsWith(root + path.sep)) {
-    throw new Error(`路径越界（必须在数据目录内）: ${rel}`);
+/**
+ * 桥接语义：路径由调用方决定（本插件只是桥梁，不设数据目录）——
+ *   对话调用：当前对话工作空间下的绝对路径（或提示词指定的任意位置）
+ *   画布调用：画布项目目录下的绝对路径
+ * 支持 ~ 展开；也接受 base(绝对目录) + rel(相对) 组合，方便批量调用。
+ */
+function resolveCallerPath(p) {
+  let s = String(p ?? '').trim();
+  if (!s) throw new Error('缺少路径参数');
+  if (s === '~' || s.startsWith('~/') || s.startsWith('~\\')) s = path.join(os.homedir(), s.slice(1));
+  const abs = path.resolve(s);
+  if (!path.isAbsolute(abs)) {
+    throw new Error('需要绝对路径 —— 对话调用传当前工作空间下的绝对路径，画布传项目目录下的绝对路径（或用 base + 相对路径组合）');
   }
-  return p;
+  return abs;
 }
 
-async function ensureDirSafe(cfg, rel) {
-  const p = resolveSafeRel(cfg.dataRoot, rel ?? '.');
-  await fs.mkdir(p, { recursive: true });
-  return p;
+function resolveBaseRel(base, rel) {
+  if (base) {
+    const b = resolveCallerPath(base);
+    if (rel == null || String(rel) === '') return b;
+    return path.resolve(b, String(rel));
+  }
+  return resolveCallerPath(rel);
+}
+
+async function ensureDir(p) {
+  const abs = resolveCallerPath(p);
+  await fs.mkdir(abs, { recursive: true });
+  return abs;
 }
 
 function cliNameFor(key) {
@@ -266,15 +284,27 @@ function controlCall(port, method, params, { timeoutMs = 30_000 } = {}) {
 
 const jobs = new Map(); // id -> job
 
-async function statOutputs(cfg, outputs) {
+/**
+ * 桥接语义：产物路径由调用方给定 ——
+ *   绝对路径直接使用；也可传 cwd（绝对目录）让 outputs 以它为基准。
+ */
+async function statOutputs(outputs, cwd) {
   const out = [];
+  const base = cwd ? resolveCallerPath(cwd) : null;
   for (const item of outputs ?? []) {
-    const rel = String(item.rel ?? item);
+    const spec = String(item.rel ?? item.path ?? item);
+    let abs;
     try {
-      const st = await fs.stat(resolveSafeRel(cfg.dataRoot, rel));
-      out.push({ rel, exists: true, dir: st.isDirectory(), size: st.size, mtime: st.mtimeMs });
+      abs = base ? path.resolve(base, spec) : resolveCallerPath(spec);
     } catch {
-      out.push({ rel, exists: false, dir: false, size: null, mtime: null });
+      out.push({ rel: spec, exists: false, dir: false, size: null, mtime: null });
+      continue;
+    }
+    try {
+      const st = await fs.stat(abs);
+      out.push({ rel: spec, path: abs, exists: true, dir: st.isDirectory(), size: st.size, mtime: st.mtimeMs });
+    } catch {
+      out.push({ rel: spec, path: abs, exists: false, dir: false, size: null, mtime: null });
     }
   }
   return out;
@@ -309,18 +339,19 @@ function pruneJobs() {
   }
 }
 
-async function startJob(cfg, { bin, args, cwdRel, outputs, timeoutMs }) {
+async function startJob(cfg, { bin, args, cwd, outputs, timeoutMs }) {
   if (!BINS.includes(bin)) throw new Error(`bin 必须是 ${BINS.join(' | ')} 之一`);
   if (args != null && !Array.isArray(args)) throw new Error('args 必须是字符串数组');
   const exe = await resolveBin(cfg, bin);
-  const cwd = await ensureDirSafe(cfg, cwdRel ?? '.');
+  // 桥接语义：cwd 由调用方给绝对路径（对话=工作空间下的目录，画布=项目目录）；不传则继承 Host 进程
+  const cwdAbs = cwd ? await ensureDir(cwd) : null;
   const id = crypto.randomUUID();
   const job = {
     id,
     bin,
     exe,
     args: (args ?? []).map(String),
-    cwd,
+    cwd: cwdAbs,
     status: 'running',
     code: null,
     signal: null,
@@ -328,11 +359,11 @@ async function startJob(cfg, { bin, args, cwdRel, outputs, timeoutMs }) {
     endedAt: null,
     stdout: [],
     stderr: [],
-    outputs: (outputs ?? []).map((rel) => ({ rel: String(rel) })),
+    outputs: (outputs ?? []).map((o) => ({ rel: String(o.rel ?? o.path ?? o) })),
     child: null,
     timer: null,
   };
-  const child = spawn(job.exe, job.args, { cwd, windowsHide: true });
+  const child = spawn(job.exe, job.args, { cwd: cwdAbs ?? undefined, windowsHide: true });
   job.child = child;
   child.stdout?.setEncoding('utf8');
   child.stderr?.setEncoding('utf8');
@@ -384,13 +415,13 @@ async function statusInfo(cfg, meta) {
     }
     bins[key] = { configured: cfg.bins[key], exe, found, note };
   }
-  let dataRoot = { path: cfg.dataRoot, exists: false };
-  try { dataRoot.exists = (await fs.stat(cfg.dataRoot)).isDirectory(); } catch { /* 不存在 */ }
+  let configPath = null;
+  try { configPath = cfg.configPath && (await fs.stat(cfg.configPath)).isFile() ? cfg.configPath : null; } catch { /* 不存在 */ }
   return {
     plugin: NAME,
     version: VERSION,
     platform: process.platform,
-    dataRoot,
+    config: { path: configPath, found: !!configPath },
     bins,
     control: cfg.control,
     jobs: {
@@ -632,7 +663,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_status',
-      description: '检查 ArtCraft 工具链（photocraft/filmcraft/effectcraft CLI）是否可用，报告数据目录、控制通道端口与任务状态。',
+      description: '检查 ArtCraft 家族 7 个 CLI 是否可用，报告配置目录、控制通道端口与任务状态。本插件只是桥接，产物路径由调用方决定。',
       schema: { type: 'object', properties: {}, additionalProperties: false },
       async execute() {
         const cfg = await loadConfig();
@@ -648,7 +679,7 @@ export function apply(ctx) {
         properties: {
           bin: { type: 'string', enum: [...BINS], description: '工具键' },
           args: { type: 'array', items: { type: 'string' }, description: '命令行参数（不含程序名）' },
-          cwdRel: { type: 'string', description: '工作目录，相对 dataRoot' },
+          cwd: { type: 'string', description: '工作目录（绝对路径，可选）：对话=当前工作空间下的目录，画布=项目目录；不传则继承 Host 进程' },
           timeoutMs: { type: 'number', description: '超时毫秒，默认 900000' },
         },
         required: ['bin', 'args'],
@@ -658,7 +689,7 @@ export function apply(ctx) {
         const cfg = await loadConfig();
         if (args.args != null && !Array.isArray(args.args)) throw new Error('args 必须是字符串数组');
         const exe = await resolveBin(cfg, String(args.bin));
-        const cwd = await ensureDirSafe(cfg, args.cwdRel ?? '.');
+        const cwd = args.cwd ? await ensureDir(args.cwd) : null;
         const r = await runProcess(exe, args.args ?? [], { cwd, timeoutMs: args.timeoutMs });
         return { bin: args.bin, exe, cwd, ...r };
       },
@@ -689,56 +720,57 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_fs',
-      description: '在 craft 数据目录（dataRoot）内进行文件操作：list / stat / readtext / write / mkdir。所有路径相对 dataRoot，禁止越界。',
+      description: '桥接文件操作：list / stat / readtext / write / mkdir。路径由调用方决定 —— 对话调用传当前工作空间下的绝对路径，画布调用传项目目录下的绝对路径（或 base + rel 组合）。',
       schema: {
         type: 'object',
         properties: {
           op: { type: 'string', enum: ['list', 'stat', 'readtext', 'write', 'mkdir'] },
-          rel: { type: 'string', description: '相对 dataRoot 的路径' },
+          path: { type: 'string', description: '绝对路径（或 ~/ 展开）' },
+          base: { type: 'string', description: '可选：绝对基准目录，rel 相对它解析' },
+          rel: { type: 'string', description: '可选：相对 base 的路径（需同时给 base）' },
           text: { type: 'string', description: 'op=write 时的文本内容' },
           base64: { type: 'string', description: 'op=write 时的二进制内容（base64）' },
         },
-        required: ['op', 'rel'],
+        required: ['op'],
         additionalProperties: false,
       },
       async execute(args) {
-        const cfg = await loadConfig();
-        const rel = String(args.rel ?? '');
         const op = String(args.op);
+        const P = () => resolveBaseRel(args.base, args.path ?? args.rel);
         if (op === 'list') {
-          const dir = resolveSafeRel(cfg.dataRoot, rel || '.');
+          const dir = P();
           const entries = await fs.readdir(dir, { withFileTypes: true });
           const out = [];
           for (const ent of entries) {
             const st = await fs.stat(path.join(dir, ent.name)).catch(() => null);
             out.push({ name: ent.name, dir: ent.isDirectory(), size: st?.size ?? null, mtime: st?.mtimeMs ?? null });
           }
-          return { rel, entries: out };
+          return { path: dir, entries: out };
         }
         if (op === 'stat') {
-          const st = await fs.stat(resolveSafeRel(cfg.dataRoot, rel));
-          return { rel, size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() };
+          const st = await fs.stat(P());
+          return { path: P(), size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() };
         }
         if (op === 'readtext') {
-          const p = resolveSafeRel(cfg.dataRoot, rel);
+          const p = P();
           const st = await fs.stat(p);
           if (st.size > TEXT_CAP) throw new Error('文件超过 16MB，请用 GET /artcraft/api/file 取回');
           const buf = await fs.readFile(p);
-          return { rel, text: buf.toString('utf8') };
+          return { path: p, text: buf.toString('utf8') };
         }
         if (op === 'mkdir') {
-          const p = await ensureDirSafe(cfg, rel);
-          return { rel, path: p };
+          const p = await ensureDir(P());
+          return { path: p };
         }
         if (op === 'write') {
-          const p = resolveSafeRel(cfg.dataRoot, rel);
+          const p = P();
           await fs.mkdir(path.dirname(p), { recursive: true });
           let data;
           if (typeof args.base64 === 'string') data = Buffer.from(args.base64, 'base64');
           else if (typeof args.text === 'string') data = Buffer.from(args.text, 'utf8');
           else throw new Error('write 需要 text 或 base64');
           await fs.writeFile(p, data);
-          return { rel, size: data.length };
+          return { path: p, size: data.length };
         }
         throw new Error(`未知 op: ${op}`);
       },
@@ -746,7 +778,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_update',
-      description: '检查/应用 @ninkch/dsh-artcraft 插件自身的更新：action=check 对比本地与 npm latest；action=apply 执行更新（git pull 或 pnpm add，按安装形态自动选择），完成后需重启 Harness 生效。',
+      description: '检查/应用 @ninkch/dsh-artcraft 插件自身的更新：action=check 对比本地与 npm latest；action=apply 执行更新（git pull 或官方 tarball 直装 + sha512 校验，按安装形态自动选择），完成后需重启 Harness 生效。',
       schema: {
         type: 'object',
         properties: {
@@ -774,48 +806,34 @@ export function apply(ctx) {
         sendJson(res, 200, await statusInfo(cfg, { registered: [...toolNames], errors: [...toolErrors] }));
       }),
 
-      makeRoute(`/${NAME}/api/projects`, async (req, res) => {
-        const cfg = await loadConfig();
-        await fs.mkdir(cfg.dataRoot, { recursive: true });
-        const entries = await fs.readdir(cfg.dataRoot, { withFileTypes: true });
-        const projects = [];
-        for (const ent of entries) {
-          if (!ent.isDirectory()) continue;
-          const st = await fs.stat(path.join(cfg.dataRoot, ent.name)).catch(() => null);
-          projects.push({ name: ent.name, mtime: st?.mtimeMs ?? null });
-        }
-        projects.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
-        sendJson(res, 200, { dataRoot: cfg.dataRoot, projects });
-      }),
-
       makeRoute(`/${NAME}/api/fs`, async (req, res) => {
-        const cfg = await loadConfig();
         const url = new URL(req.url, 'http://x');
+        const base = url.searchParams.get('base'); // 可选：绝对基准目录（画布=项目目录，对话=工作空间下目录）
+        const P = () => resolveBaseRel(base, url.searchParams.get('path') ?? url.searchParams.get('rel'));
         if (req.method === 'GET') {
           const op = url.searchParams.get('op') ?? 'list';
-          const rel = url.searchParams.get('rel') ?? '.';
           if (op === 'list') {
-            const dir = resolveSafeRel(cfg.dataRoot, rel);
+            const dir = P();
             const entries = await fs.readdir(dir, { withFileTypes: true });
             const out = [];
             for (const ent of entries) {
               const st = await fs.stat(path.join(dir, ent.name)).catch(() => null);
               out.push({ name: ent.name, dir: ent.isDirectory(), size: st?.size ?? null, mtime: st?.mtimeMs ?? null });
             }
-            sendJson(res, 200, { rel, entries: out });
+            sendJson(res, 200, { path: dir, entries: out });
             return;
           }
           if (op === 'stat') {
-            const st = await fs.stat(resolveSafeRel(cfg.dataRoot, rel));
-            sendJson(res, 200, { rel, size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() });
+            const st = await fs.stat(P());
+            sendJson(res, 200, { path: P(), size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() });
             return;
           }
           if (op === 'readtext') {
-            const p = resolveSafeRel(cfg.dataRoot, rel);
+            const p = P();
             const st = await fs.stat(p);
             if (st.size > TEXT_CAP) throw new Error('文件超过 16MB，请改用 GET /artcraft/api/file');
             const buf = await fs.readFile(p);
-            sendJson(res, 200, { rel, text: buf.toString('utf8') });
+            sendJson(res, 200, { path: p, text: buf.toString('utf8') });
             return;
           }
           throw new Error(`未知 op: ${op}`);
@@ -824,47 +842,43 @@ export function apply(ctx) {
           const action = url.searchParams.get('action') ?? 'write';
           if (action === 'mkdir') {
             const body = await readJson(req);
-            const p = await ensureDirSafe(cfg, body.rel ?? url.searchParams.get('rel'));
+            const p = await ensureDir(resolveBaseRel(body.base ?? url.searchParams.get('base'), body.path ?? body.rel ?? url.searchParams.get('rel')));
             sendJson(res, 200, { ok: true, path: p });
             return;
           }
-          // write：JSON {rel, base64|text} 或原始字节流（rel 走查询串）
+          // write：JSON {path 或 base+rel, base64|text} 或原始字节流（路径走查询串）
           const isJson = String(req.headers['content-type'] ?? '').includes('json');
-          let rel;
+          let target;
           let data;
           if (isJson) {
             const body = await readJson(req, WRITE_CAP);
-            rel = String(body.rel ?? url.searchParams.get('rel') ?? '');
             if (typeof body.base64 === 'string') data = Buffer.from(body.base64.replace(/\s+/g, ''), 'base64');
             else if (typeof body.text === 'string') data = Buffer.from(body.text, 'utf8');
             else throw new Error('write 需要 base64 或 text 字段');
+            target = resolveBaseRel(body.base ?? url.searchParams.get('base'), body.path ?? body.rel ?? url.searchParams.get('rel'));
           } else {
-            rel = String(url.searchParams.get('rel') ?? '');
             data = await readBody(req, WRITE_CAP);
+            target = resolveBaseRel(url.searchParams.get('base'), url.searchParams.get('path') ?? url.searchParams.get('rel'));
           }
-          if (!rel) throw new Error('缺少 rel');
-          const p = resolveSafeRel(cfg.dataRoot, rel);
-          await fs.mkdir(path.dirname(p), { recursive: true });
-          await fs.writeFile(p, data);
-          sendJson(res, 200, { ok: true, rel, size: data.length });
+          await fs.mkdir(path.dirname(target), { recursive: true });
+          await fs.writeFile(target, data);
+          sendJson(res, 200, { ok: true, path: target, size: data.length });
           return;
         }
         throw new Error('仅支持 GET/POST');
       }),
 
       makeRoute(`/${NAME}/api/file`, async (req, res) => {
-        const cfg = await loadConfig();
         if (req.method !== 'GET') throw new Error('仅支持 GET');
         const url = new URL(req.url, 'http://x');
-        const rel = String(url.searchParams.get('rel') ?? '');
-        const p = resolveSafeRel(cfg.dataRoot, rel);
+        const p = resolveBaseRel(url.searchParams.get('base'), url.searchParams.get('path') ?? url.searchParams.get('rel'));
         const st = await fs.stat(p);
         if (!st.isFile()) throw new Error('不是常规文件');
         if (st.size > READ_CAP) throw new Error(`文件超过读取上限（${Math.round(READ_CAP / 1048576)}MB）`);
         if (url.searchParams.get('as') === 'text') {
           if (st.size > TEXT_CAP) throw new Error('文本模式上限 16MB，请直接下载原始文件');
           const buf = await fs.readFile(p);
-          sendJson(res, 200, { rel, text: buf.toString('utf8') });
+          sendJson(res, 200, { path: p, text: buf.toString('utf8') });
           return;
         }
         // 流式传输：产物可能是几百 MB 的视频，不整读进内存
@@ -882,13 +896,13 @@ export function apply(ctx) {
           if (id) {
             const job = jobs.get(id);
             if (!job) throw new Error('任务不存在或已被回收');
-            job.outputs = await statOutputs(cfg, job.outputs);
+            job.outputs = await statOutputs(job.outputs, job.cwd);
             sendJson(res, 200, jobSnapshot(job, tail));
             return;
           }
           const list = [];
           for (const job of [...jobs.values()].reverse()) {
-            job.outputs = await statOutputs(cfg, job.outputs);
+            job.outputs = await statOutputs(job.outputs, job.cwd);
             list.push(jobSnapshot(job, 5));
           }
           sendJson(res, 200, { jobs: list });
