@@ -24,12 +24,12 @@ Effects）等。它们有一个大多数桌面软件都不具备的共同基因�
 本插件把这套自动化面接进 DeepSeek Harness，让 AI 不只是"谈论"这些软件，而是真的**操作**它们：
 
 - **对话里** —— 四个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
-  App 发控制通道命令、在专属数据目录里读写文件。
+  App 发控制通道命令、做桥接文件操作。
 - **浏览器里** —— 同源 HTTP API（`/artcraft/api/*`），任何 Harness 前端都能直接调用：无 CORS、
   无密钥。它为 [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md)（节点式 AI 短剧
   分镜画布）而建，但任何前端都可用。
-- **磁盘上** —— 每台机器一个 `dataRoot`，素材、工程文件、渲染产物按项目分区
-  （`media/ · craft/ · out/`），生成式流水线与桌面应用在同一片地基上会合。
+- **路径由调用方决定** —— 本插件只是桥接，不持有数据目录：对话调用默认落在当前对话工作空间
+  （或提示词指定的任意位置）；画布调用则写在自己项目目录下。
 
 典型的 AI 短剧闭环：模型生成分镜图 → PhotoCraft 批量调色锐化 → EffectCraft 渲染动态片头 →
 FilmCraft 剪辑、调色、混音、烧字幕 → 导出 H.264。"生成"之后的每一步都由本插件无头驱动。
@@ -96,17 +96,17 @@ pnpm install --dir C:/Users/<你>/.dsh/profiles/desktop
 
 > 若你的 Harness 版本带有"从文件夹安装插件"的管理界面，用它也行 —— 最终落盘的就是上面两行。
 
-**3. 配置** `index.js` 旁边的 `artcraft.config.json`（从 `artcraft.config.json.example` 复制；
-该文件已 gitignore，且每次请求都会重读 —— 改路径无需重启）：
+**3. 配置** `artcraft.config.json`（从 `artcraft.config.json.example` 复制）。推荐放
+`C:\Users\<你>\.dsh\artcraft.config.json`（持久，更新插件不丢）；放在 `index.js` 旁也可（旧版兼容）。
+文件已 gitignore，且每次请求都会重读 —— 改路径无需重启：
 
 ```jsonc
 {
-  "dataRoot": "D:/craft-workspace",              // 素材与产物的根目录
   "bins": {
     // 三种写法：目录（自动拼接 <名>-cli 可执行文件）、完整 exe 路径、或走 PATH 的裸命令名
     "photocraft":  "C:/craft/photocraft-0.6.0-windows-x64-portable",
     "filmcraft":   "C:/craft/filmcraft-0.5.0-windows-x64-portable",
-    "effectcraft": "C:/craft/effectcraft-windows-x64-portable"
+    "effectcraft": "C:/Program Files/EffectCraft"
   },
   "control": { "filmcraft": 9876, "effectcraft": 9877 }
 }
@@ -129,10 +129,10 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | 工具 | 用途 |
 |---|---|
-| `artcraft_status` | 工具体检：CLI 是否找到、数据目录、控制端口、进行中的任务 |
+| `artcraft_status` | 工具体检：CLI 是否找到、配置目录、控制端口、进行中的任务 |
 | `artcraft_cli` | 同步执行任意 CLI 子命令（`photocraft-cli run/batch`、`filmcraft-cli commands` 等） |
 | `artcraft_control` | 向**运行中**的 FilmCraft / EffectCraft 控制通道发一条命令 |
-| `artcraft_fs` | 在 `dataRoot` 内 list / stat / 读 / 写 / 建目录（写 `grade.json`、取回 `.ecproj` 等） |
+| `artcraft_fs` | 桥接文件操作 —— list / stat / 读 / 写 / 建目录，路径由调用方绝对指定 |
 
 ## 在浏览器里驱动
 
@@ -159,15 +159,15 @@ POST /artcraft/api/job/cancel  { "id":"7f2c…" }
 | 路由 | 用途 |
 |---|---|
 | `GET /artcraft/api/status` | 工具体检（与 `artcraft_status` 同数据） |
-| `GET /artcraft/api/projects` | `dataRoot` 下的项目目录 |
-| `POST /artcraft/api/fs?action=write&rel=…` | 写文件 —— 原始字节流（Blob 直传）或 JSON `{rel, text\|base64}` |
-| `GET /artcraft/api/fs?op=list\|stat\|readtext&rel=…` | 读目录、元数据、小文本 |
-| `GET /artcraft/api/file?rel=…` | 下载文件 —— 流式，上限 2 GB |
+| `POST /artcraft/api/fs?action=write&path=…` | 写文件 —— 绝对 `path`，原始字节流（Blob 直传）或 JSON `{base, rel, text\|base64}` |
+| `GET /artcraft/api/fs?op=list\|stat\|readtext&path=…` | 读目录、元数据、小文本 |
+| `GET /artcraft/api/file?path=…` | 下载文件 —— 流式，上限 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | 任务生命周期，含产物探测与日志尾部 |
 | `POST /artcraft/api/control` | 控制通道同步调用 |
 
 上传单次上限 320 MB（原始路径 Blob 直传，无需 base64）；下载流式上限 2 GB。
-所有路径参数相对 `dataRoot` 且被限制在其中。
+所有路径参数为**绝对路径**（或 `base` 绝对目录 + 相对 `rel`）—— 位置由调用方决定：
+对话调用指向当前工作空间，画布调用指向其项目目录。
 
 ## 控制通道：驱动正在运行的 App
 
@@ -244,13 +244,14 @@ NVENC 硬编）、ProRes、DNxHR，附 EBU R128 响度归一与字幕烧录。�
   不会有别的应答者。
 - **任务卡住** —— `GET /artcraft/api/job` 带日志列出全部任务，按 id 取消；插件重载会按设计
   终止所有子任务。
-- **路径越界报错** —— 设计如此：所有文件参数必须落在 `dataRoot` 之内。
+- **"需要绝对路径"报错** —— 传绝对路径即可：对话用当前工作空间下的路径，画布用项目目录下的
+  路径（或 `base` 绝对目录 + 相对 `rel`）。
 
 ## 安全与信任模型
 
 HTTP 面无鉴权，挂在 Harness Web 服务之下（仅回环监听）—— 把端口当本机可信处理，**不要暴露
-到网络**；确需远程请加带鉴权的反向代理。子进程锁定三个白名单可执行文件；文件访问锁定
-`dataRoot`；控制通道只会拨 `127.0.0.1`。
+到网络**；确需远程请加带鉴权的反向代理。子进程锁定 7 个白名单家族 CLI；控制通道只会拨
+`127.0.0.1`。
 
 ## 发布
 

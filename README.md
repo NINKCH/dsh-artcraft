@@ -25,13 +25,13 @@ This plugin brings that surface into DeepSeek Harness, so an AI agent can *opera
 not just talk about them:
 
 - **In chat** — four agent tools let any Harness session check the toolchain, run CLI commands,
-  send control-channel commands to a running app, and read/write files in a dedicated data root.
+  send control-channel commands to a running app, and do bridged file operations.
 - **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
   no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
   a node-based AI short-drama storyboard canvas, but any front end can use it.
-- **On disk** — one `dataRoot` per machine where assets, project files and rendered output live,
-  laid out per project (`media/ · craft/ · out/`), so generative pipelines and the desktop apps
-  meet on common ground.
+- **Paths belong to the caller** — this plugin is a bridge and owns no data directory. Files read
+  or written go wherever the caller points: chat invocations default to the current conversation
+  workspace (or any path named in the prompt); the canvas writes under its own project folder.
 
 A typical AI short-drama loop looks like this: generate storyboard frames with a model →
 batch color-grade and sharpen them in PhotoCraft → render an animated title in EffectCraft →
@@ -102,19 +102,19 @@ pnpm install --dir C:/Users/<you>/.dsh/profiles/desktop
 > If your Harness build ships a plugin manager UI that installs from a folder, that works too —
 > it ends up writing exactly the two lines above.
 
-**3. Configure** `artcraft.config.json` next to `index.js` (copy from
-`artcraft.config.json.example`; the file is git-ignored and re-read on every request — no restart
-needed for path changes):
+**3. Configure** `artcraft.config.json` (copy from
+`artcraft.config.json.example`). Recommended location: `C:\Users\<you>\.dsh\artcraft.config.json`
+(persists across plugin updates); placing it next to `index.js` also works (legacy). The file is
+re-read on every request — no restart needed for path changes:
 
 ```jsonc
 {
-  "dataRoot": "D:/craft-workspace",              // where assets & renders live
   "bins": {
     // three accepted forms: a directory (the <name>-cli binary is appended),
     // a full path to the executable, or a bare name looked up on PATH
     "photocraft":  "C:/craft/photocraft-0.6.0-windows-x64-portable",
     "filmcraft":   "C:/craft/filmcraft-0.5.0-windows-x64-portable",
-    "effectcraft": "C:/craft/effectcraft-windows-x64-portable"
+    "effectcraft": "C:/Program Files/EffectCraft"
   },
   "control": { "filmcraft": 9876, "effectcraft": 9877 }
 }
@@ -139,10 +139,10 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | Tool | What it does |
 |---|---|
-| `artcraft_status` | Toolchain health check: which CLIs resolved, data root, control ports, running jobs |
+| `artcraft_status` | Toolchain health check: which CLIs resolved, config location, control ports, running jobs |
 | `artcraft_cli` | Run any CLI subcommand synchronously (`photocraft-cli run/batch`, `filmcraft-cli commands`, …) |
 | `artcraft_control` | One command over the JSON control channel of a *running* FilmCraft / EffectCraft |
-| `artcraft_fs` | list / stat / read / write / mkdir inside `dataRoot` (writing `grade.json`, fetching a rendered `.ecproj`, …) |
+| `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
 
 ## Driving it from the browser
 
@@ -170,15 +170,16 @@ Full route list:
 | Route | Purpose |
 |---|---|
 | `GET /artcraft/api/status` | Toolchain health (same payload as `artcraft_status`) |
-| `GET /artcraft/api/projects` | Project directories under `dataRoot` |
-| `POST /artcraft/api/fs?action=write&rel=…` | Write a file — raw body (Blob upload) or JSON `{rel, text\|base64}` |
-| `GET /artcraft/api/fs?op=list\|stat\|readtext&rel=…` | Read directories, metadata, small text files |
-| `GET /artcraft/api/file?rel=…` | Download a file — streamed, up to 2 GB |
+| `POST /artcraft/api/fs?action=write&path=…` | Write a file — absolute `path`, raw body (Blob upload) or JSON `{base, rel, text\|base64}` |
+| `GET /artcraft/api/fs?op=list\|stat\|readtext&path=…` | Read directories, metadata, small text files |
+| `GET /artcraft/api/file?path=…` | Download a file — streamed, up to 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | Job lifecycle with output statting and tail logs |
 | `POST /artcraft/api/control` | Synchronous control-channel call |
 
 Uploads are capped at 320 MB per request (Blob direct, no base64 needed for the raw path);
-downloads stream up to 2 GB. Path arguments are always relative to `dataRoot` and confined to it.
+downloads stream up to 2 GB. All path arguments are **absolute** (or `base` absolute directory +
+relative `rel`) — the caller decides where files live: chat calls point at the conversation
+workspace, the canvas points at its project folder.
 
 ## The control channel: drive a running app
 
@@ -259,14 +260,15 @@ a web UI.
   loopback-only and unauthenticated, so nothing else will answer on that port.
 - **A job hangs** — `GET /artcraft/api/job` lists everything with logs; cancel by id. Plugin
   reloads kill all child jobs by design.
-- **Path escape errors** — by design: every filesystem argument must resolve inside `dataRoot`.
+- **"需要绝对路径" errors** — pass absolute paths (chat: the conversation workspace; canvas: the
+  project folder), or a `base` absolute directory + relative `rel`.
 
 ## Security & trust model
 
 The HTTP surface has **no authentication** and rides on the Harness web server, which listens on
 loopback only — treat the port as trusted-local and don't expose it to a network; put a reverse
-proxy with auth in front if you must. Child processes are locked to the three allow-listed
-binaries; file access is locked to `dataRoot`; the control channel only ever dials `127.0.0.1`.
+proxy with auth in front if you must. Child processes are locked to the seven allow-listed
+family CLIs; the control channel only ever dials `127.0.0.1`.
 
 ## Publishing
 
