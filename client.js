@@ -62,10 +62,19 @@ window.__ModuleLoader__.load({
       useEffect(() => () => { alive.current = false; }, []);
 
       const loadStatus = useCallback(async () => {
+        setBusy('refresh');
         try {
+          // 刷新 = 状态 + 顺带一次家族安装探测（后装软件/改安装目录后自动修正配置；
+          // 探测端点在旧版插件上不存在时静默跳过）
+          try {
+            await api('/discover', {
+              method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+            });
+          } catch { /* 旧版无此路由 → 静默跳过 */ }
           const s = await api('/status');
           if (alive.current) { setStatus(s); setStatusErr(null); }
         } catch (e) { if (alive.current) setStatusErr(String(e.message || e)); }
+        finally { if (alive.current) setBusy(''); }
       }, []);
 
       const checkUpdate = useCallback(async () => {

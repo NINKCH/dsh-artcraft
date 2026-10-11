@@ -42,7 +42,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.8';
+const VERSION = '0.2.9';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = ['photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft', 'designcraft'];
@@ -863,14 +863,22 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_discover',
-      description: '自动探测本机 ArtCraft 家族软件安装位置（Program Files / LocalAppData\\Programs 等），把发现的家族 CLI 路径写入配置（只填充仍为默认裸名的项，不覆盖用户显式配置）。',
+      description: '自动探测本机 ArtCraft 家族软件安装位置（Program Files / LocalAppData\\Programs 等），写入/修复配置：填充默认空缺项，并自动纠正已失效的路径（改安装目录、卸载重装到别处）；用户显式配置仍有效则不动。',
       schema: { type: 'object', properties: {}, additionalProperties: false },
       async execute() {
         const cfg = await loadConfig();
         const found = await discoverBinPaths();
         const applied = {};
         for (const k of BINS) {
-          if (found[k] && (!cfg.bins[k] || cfg.bins[k] === k + '-cli')) applied[k] = found[k];
+          if (!found[k]) continue;
+          let effective = null;
+          try { effective = await resolveBin(cfg, k); } catch { /* 未配置 */ }
+          const ok = effective ? await fileExists(effective) : false;
+          if (ok) continue; // 现有配置仍有效 → 不动
+          applied[k] = found[k];
+        }
+        if (!Object.keys(applied).length) {
+          return { applied: {}, configPath: cfg.configPath, note: '家族程序路径均已就绪，无需更新' };
         }
         const target = cfg.configPath || path.join(os.homedir(), '.dsh', 'artcraft.config.json');
         let obj = {};
@@ -878,7 +886,7 @@ export function apply(ctx) {
         obj.bins = { ...(obj.bins ?? {}), ...applied };
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.writeFile(target, JSON.stringify(obj, null, 2) + '\n');
-        return { applied, configPath: cfg.configPath, note: applied.length ? '已写入配置，立即生效' : '没有需要填充的条目' };
+        return { applied, configPath: target, note: '已写入配置，立即生效' };
       },
     });
 
@@ -1032,10 +1040,15 @@ export function apply(ctx) {
         if (req.method !== 'POST') throw new Error('仅支持 POST');
         const cfg = await loadConfig();
         const found = await discoverBinPaths();
-        // 只填充仍为默认裸名的键，不覆盖用户显式配置
+        // 只填充默认空缺项；显式配置仅在已失效（改安装目录/卸载重装）时自动纠正，有效则不动
         const applied = {};
         for (const k of BINS) {
-          if (found[k] && (!cfg.bins[k] || cfg.bins[k] === k + '-cli')) applied[k] = found[k];
+          if (!found[k]) continue;
+          let effective = null;
+          try { effective = await resolveBin(cfg, k); } catch { /* 未配置 */ }
+          const ok = effective ? await fileExists(effective) : false;
+          if (ok) continue;
+          applied[k] = found[k];
         }
         if (Object.keys(applied).length) {
           const target = cfg.configPath || path.join(os.homedir(), '.dsh', 'artcraft.config.json');
@@ -1045,7 +1058,12 @@ export function apply(ctx) {
           await fs.mkdir(path.dirname(target), { recursive: true });
           await fs.writeFile(target, JSON.stringify(obj, null, 2) + '\n');
         }
-        sendJson(res, 200, { discovered: found, applied, configPath: cfg.configPath, note: applied.length ? '已写入配置，立即生效' : '没有新发现的家族程序' });
+        sendJson(res, 200, {
+          discovered: found,
+          applied,
+          configPath: cfg.configPath,
+          note: Object.keys(applied).length ? '已探测并写入配置，立即生效' : '没有需要更新的家族程序',
+        });
       }),
 
       makeRoute(`/${NAME}/api/control`, async (req, res) => {
