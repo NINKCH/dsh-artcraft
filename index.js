@@ -42,7 +42,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.7';
+const VERSION = '0.2.8';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = ['photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft', 'designcraft'];
@@ -533,17 +533,30 @@ async function detectInstall() {
   return { mode: repoDir ? 'git' : 'npm', here, real, repoDir, profileDir, gitClean, branch };
 }
 
+const REGISTRIES = ['https://registry.npmjs.org', 'https://registry.npmmirror.com'];
+
 async function fetchLatestVersion() {
-  const url = `https://registry.npmjs.org/${PKG_NAME.replace('/', '%2f')}/latest`;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-    if (res.status === 404) return { latest: null, note: 'npm 上还没有这个包' };
-    if (!res.ok) throw new Error('registry 返回 ' + res.status);
-    const j = await res.json();
-    return { latest: j.version ?? null, tarball: j.dist?.tarball ?? null, integrity: j.dist?.integrity ?? null };
-  } catch (e) {
-    return { latest: null, note: '查询 npm 失败: ' + String(e?.cause?.message || e?.message || e) };
+  const slug = PKG_NAME.replace('/', '%2f');
+  const errors = [];
+  // 回退链：官方源 → npmmirror 镜像（国内无代理机器也能完成检查与更新）
+  for (const reg of REGISTRIES) {
+    try {
+      const res = await fetch(`${reg}/${slug}/latest`, { signal: AbortSignal.timeout(12000) });
+      if (res.status === 404) { errors.push(`${reg}: 404`); continue; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const j = await res.json();
+      if (!j.version) { errors.push(`${reg}: 无版本数据`); continue; }
+      return {
+        latest: j.version ?? null,
+        tarball: j.dist?.tarball ?? null,
+        integrity: j.dist?.integrity ?? null,
+        source: reg,
+      };
+    } catch (e) {
+      errors.push(`${reg}: ${String(e?.cause?.message || e?.message || e)}`);
+    }
   }
+  return { latest: null, note: '查询失败（官方源与 npmmirror 均不可达）—— ' + errors.join('；') };
 }
 
 async function updateCheck() {
@@ -585,8 +598,20 @@ async function updateApply() {
   await fs.mkdir(tmp, { recursive: true });
   try {
     const tgzPath = path.join(tmp, 'pkg.tgz');
-    const res = await fetch(meta.tarball, { signal: AbortSignal.timeout(180000) });
-    if (!res.ok) throw new Error('下载 tarball 失败: HTTP ' + res.status);
+    // 下载：优先元数据自带的官方地址；失败时回退 npmmirror 镜像（sha512 校验保证内容一致）
+    let res;
+    try {
+      res = await fetch(meta.tarball, { signal: AbortSignal.timeout(180000) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+    } catch (e) {
+      const slug = PKG_NAME.replace('/', '%2f');
+      const mirrorUrl = `https://registry.npmmirror.com/${slug}/-/${PKG_NAME.split('/')[1]}-${meta.latest}.tgz`;
+      WriteMirrorRetry: {
+        res = await fetch(mirrorUrl, { signal: AbortSignal.timeout(180000) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        break WriteMirrorRetry;
+      }
+    }
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > 64 * 1024 * 1024) throw new Error('tarball 超过 64MB 上限，已终止');
     const digest = crypto.createHash('sha512').update(buf).digest('base64');
