@@ -83,9 +83,12 @@ window.__ModuleLoader__.load({
           const u = await api('/update/check');
           if (!alive.current) return;
           setUpd(u);
-          setOut(u.updateAvailable
-            ? `有新版本：v${u.latest}（当前 v${u.current}），安装方式：${u.mode === 'git' ? 'git 仓库' : 'npm 安装'}`
-            : `已是最新${u.latest ? '（npm latest v' + u.latest + '）' : ''}${u.note ? ' · ' + u.note : ''}`);
+          // 待重启优先于"有新版本"：新包已在磁盘、运行中的还是旧代码，重启前不再误导
+          setOut(u.pendingRestart
+            ? `✅ 已更新到 v${u.pendingVersion ?? u.diskVersion ?? '?'}，请重启 Harness 完成更新（运行中的仍是 v${u.current}，页面刷新不够）`
+            : u.updateAvailable
+              ? `有新版本：v${u.latest}（当前 v${u.current}），安装方式：${u.mode === 'git' ? 'git 仓库' : 'npm 安装'}`
+              : `已是最新${u.latest ? '（npm latest v' + u.latest + '）' : ''}${u.note ? ' · ' + u.note : ''}`);
         } catch (e) { if (alive.current) setOut('检查失败：' + String(e.message || e)); }
         finally { if (alive.current) setBusy(''); }
       }, []);
@@ -99,7 +102,11 @@ window.__ModuleLoader__.load({
           // 不自动刷新/重启任何东西：本插件是 Host 半侧代码，生效 = 重启 Harness 进程
           if (r.needRestart) {
             setDone(true);
-            setOut((r.output || '') + '\n\n✅ 更新已写入磁盘。生效方式：重启 DeepSeek Harness（进程级重启，页面刷新不够）。何时重启由你决定。');
+            // 立即把"待重启"写进 upd（服务端事实），后续任何 checkUpdate/重挂载都会保持常驻横幅
+            setUpd((u) => (u
+              ? { ...u, pendingRestart: true, pendingVersion: r.latest ?? u.pendingVersion, diskVersion: r.latest ?? u.diskVersion, updateAvailable: false }
+              : u));
+            setOut((r.output || '') + '\n\n✅ 更新已写入磁盘（v' + (r.latest ?? '?') + '）。生效方式：重启 DeepSeek Harness（进程级重启，页面刷新不够）。何时重启由你决定。');
           }
         } catch (e) { if (alive.current) setOut('更新失败：' + String(e.message || e)); }
         finally { if (alive.current) setBusy(''); }
@@ -134,6 +141,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'dshac-row', style: { marginTop: '10px' } },
           h('span', { className: 'dshac-muted' },
             '当前 v' + (status?.version ?? upd?.current ?? '?') +
+            (upd?.pendingRestart ? '（磁盘已是 v' + (upd.pendingVersion ?? upd.diskVersion ?? '?') + '，待重启）' : '') +
             (upd ? ' · npm latest v' + (upd.latest ?? '—') : '') +
             (upd?.mode ? '（' + (upd.mode === 'git' ? 'git 仓库' + (upd.gitClean === false ? ' · 有本地改动' : '') : 'npm 安装') + '）' : '')),
           h('button', { className: 'dshac-btn primary', onClick: checkUpdate, disabled: busy !== '' },
@@ -141,11 +149,11 @@ window.__ModuleLoader__.load({
           h('button', {
             className: 'dshac-btn',
             onClick: applyUpdate,
-            disabled: busy !== '' || !upd?.updateAvailable,
-            title: upd?.updateAvailable ? '' : '有新版本时才可应用',
+            disabled: busy !== '' || !upd?.updateAvailable || upd?.pendingRestart,
+            title: upd?.pendingRestart ? '更新已写入磁盘，重启 Harness 后生效' : (upd?.updateAvailable ? '' : '有新版本时才可应用'),
           }, busy === 'apply' ? '更新中…' : '一键更新')),
-        done ? h('div', { className: 'dshac-note' },
-          '更新已写入磁盘。生效方式：重启 DeepSeek Harness（进程级重启，页面刷新不够）。何时重启由你决定 —— 更新不会打断正在运行的任务。') : null,
+        (upd?.pendingRestart || done) ? h('div', { className: 'dshac-note' },
+          '✅ 新版已写入磁盘，请重启 DeepSeek Harness 以完成更新（进程级重启，页面刷新不够）。重启后这里会显示新版本，何时重启由你决定 —— 更新不会打断正在运行的任务。') : null,
         out ? h('div', { className: 'dshac-out' }, out) : null,
       );
     }

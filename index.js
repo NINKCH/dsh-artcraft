@@ -46,7 +46,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.9';
+const VERSION = '0.2.10';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = [
@@ -620,10 +620,22 @@ async function updateCheck() {
   const current = VERSION;
   const { latest, note } = await fetchLatestVersion();
   const info = await detectInstall();
+  // 磁盘版本 vs 运行版本：apply 已把新包写进磁盘（换目录 / git pull），但运行中的进程还是旧代码 ——
+  // 只对比 npm 版本号会让"一键更新后"看起来又回到有新版本。把"待重启"作为服务端事实返回，
+  // 前端据此常驻提示，卡片重挂载/页面刷新都不丢，真重启后（磁盘=运行）自动消失。
+  let diskVersion = null;
+  try {
+    const pj = JSON.parse(await fs.readFile(path.join(HERE, 'package.json'), 'utf8'));
+    diskVersion = typeof pj?.version === 'string' ? pj.version : null;
+  } catch { /* 非关键 */ }
+  const pendingRestart = !!(diskVersion && diskVersion !== current);
   return {
     current,
     latest,
+    diskVersion,
     updateAvailable: !!(latest && semverGt(latest, current)),
+    pendingRestart,
+    pendingVersion: pendingRestart ? diskVersion : null,
     mode: info.mode,
     repoDir: info.repoDir,
     gitClean: info.gitClean,
