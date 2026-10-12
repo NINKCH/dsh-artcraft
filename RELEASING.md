@@ -6,6 +6,7 @@
 2. **npm `latest` 是正式渠道**：任何未经验证的版本不得进入。别人的机器会直接装到它。
 3. 发布标签**只允许打在 main 分支上**；工作流内置守卫 —— 标签不在 main 上时自动拒绝发布。
 4. 本插件是给别人用的产品：每个进入 npm 的版本都默认"别人要用"，按产品质量对待。
+5. **GitHub 面向公众的文字一律英文、纯 ASCII**（Release 说明 / Issue / PR 描述）：中文在 PowerShell 发送链路里会被逐字符打成 `?`（见教训），公开文本一律英文书写。
 
 ## 分支模型
 
@@ -34,11 +35,15 @@
    - 涉及 UI 的：插件页详情卡人工确认
 2. 向维护者汇报"改了什么 + 测了什么 + 结果"，**获得明确批准**。
 3. `git switch main && git merge dev`（推送到 GitHub 由维护者自己执行：`git push origin main dev`）
-4. GitHub → Releases → **Draft a new release** → 选/建 tag `vX.Y.Z`（必须与 package.json version 一致）→ **Publish release** ← 触发 npm 自动发布（OIDC，无令牌无 OTP）
-5. 发布后验证：Actions 绿 + `npm view @ninkch/dsh-artcraft version` 正确 + 本地重启探针正常。
+4. GitHub → Releases → **Draft a new release** → 选/建 tag `vX.Y.Z`（必须与 package.json version 一致）→ **Publish release** ← 触发 npm 自动发布（OIDC，无令牌无 OTP）。
+   Release 说明**英文、纯 ASCII**。若用 API 创建/修改：`Invoke-RestMethod` 的 body 必须发 UTF-8 字节 ——
+   `-Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType 'application/json; charset=utf-8'`（绝不直接传字符串 body）；
+   创建后必须 **GET 回读 body**，确认无成串 `?` 乱码才算完成。
+5. 发布后验证：Actions 绿 + `npm view @ninkch/dsh-artcraft version` 正确 + 本地重启探针正常 + Release 正文无乱码（英文纯 ASCII）。
 
 ## 已知教训（不要再犯）
 
+- **Invoke-RestMethod 直接传字符串 body，非 ASCII 会按 Latin-1/ANSI 逐字符打成 `?`**（v0.2.8/v0.2.9 Release 说明中文全变问号的根因）：字符串在 .NET 内存里是 UTF-16 也没用，坏在 HTTP 编码层；API 照样返回 201，不回读根本发现不了。凡 body 含非 ASCII，一律 `[Text.Encoding]::UTF8.GetBytes()` + `charset=utf-8`，发完回读验证；GitHub 公开文字直接用英文纯 ASCII，一劳永逸。
 - **PowerShell 5.1 的 `Set-Content -Encoding UTF8` 会写 UTF-8 BOM** → DSH 加载器 `JSON.parse` 失败，整包"异常"。改文件一律用编辑工具（write/edit），或 PS7 的 `-Encoding utf8NoBOM`。发版前扫一遍 BOM。
 - npm 经典令牌（含 Automation）**不能发布**（新政策）；发布走 Trusted Publishing（OIDC）或带 bypass-2FA 的 Granular 令牌（npm 已宣布 2027-01 停用 bypass 直发，届时迁 GitHub Actions 可信发布/环境审批 —— 本仓库已经用 OIDC，无感）。
 - bypass-2FA 令牌**不能 unpublish** —— 删除已发布包只能维护者在 npmjs.com 网页操作。
