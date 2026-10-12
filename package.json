@@ -35,6 +35,7 @@
     "client.js",
     "cordis.patch.yml",
     "artcraft.config.json.example",
+    "recipes",
     "README.md",
     "README.zh-CN.md",
     "NOTICE.md"

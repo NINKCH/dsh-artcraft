@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "updated": "2026-10-10",
+  "recipes": [
+    {
+      "id": "poster-short-drama",
+      "title": "短剧海报（竖版）",
+      "apps": ["photocraft"],
+      "goal": "生成竖版短剧海报：标题层级、装饰元素、无损输出",
+      "principles": [
+        "视觉层级：主标题 → 副标题 → 装饰元素，字号/字重至少差 2 级，同屏不超过 3 个信息层",
+        "对比度：文字与背景亮度差 ≥ 4.5:1，浅背景加深色字，深背景加浅色字，或加投影/描边兜底",
+        "安全边距：四周留 5% 不放关键内容（平台裁切友好）",
+        "中文字体显式指定（如 Noto Sans SC），不要依赖默认字体（缺 CJK 字形会变方框）",
+        "HTTP 传中文参数一律走 UTF-8 字节体，避免编码损坏"
+      ],
+      "steps": [
+        "photocraft-cli run --new '{\"width\":1080,\"height\":1440}' --cmd <背景填充/渐变命令> --out <工作空间>/poster.png",
+        "标题：Noto Sans SC，主标题字号 ≥ 120，副标题 ≤ 48；装饰条用像素层绘制",
+        "逐层 --cmd 叠加（每条 --params 作用于前一个 --cmd），最后 --out 输出 PNG 无损"
+      ],
+      "checks": ["取回产物做视觉检查：字形完整、层级清晰、四边安全区无关键内容"]
+    },
+    {
+      "id": "storyboard-color-grade",
+      "title": "分镜批量调色（一致性）",
+      "apps": ["photocraft"],
+      "goal": "整批分镜图统一色调，保持跨镜一致性",
+      "principles": [
+        "先定基调再微调：一条柔和 S 曲线 + 少量 vibrance，避免逐张各调各的",
+        "保护肤色：调整幅度宁小勿大，人脸偏色比不够风格化更伤观感",
+        "锐化放在调色之后（amount 60-80），避免锐化放大噪点",
+        "actions.json 一处定义、整批复用，保证批次内完全一致"
+      ],
+      "steps": [
+        "写 craft/grade.json：[{\"cmd\":\"layer.newAdjustmentLayer.curves\",\"params\":{\"points\":[[0,0],[64,48],[192,212],[255,255]]}},{\"cmd\":\"filter.sharpen.smartSharpen\",\"params\":{\"amount\":80}}]",
+        "photocraft-cli batch --actions <项目>/craft/grade.json --in <项目>/media --out <项目>/out/graded",
+        "抽 2-3 张对比原图检查，不满意只调曲线中段（64,48 / 192,212 两点）重跑"
+      ],
+      "checks": ["抽样对比：同场景相邻分镜色调一致；高光不过曝、暗部不死黑"]
+    },
+    {
+      "id": "vertical-reframe",
+      "title": "横转竖重构图",
+      "apps": ["filmcraft", "photocraft"],
+      "goal": "16:9 素材适配 9:16 竖屏，三种策略按画面主体选择",
+      "principles": [
+        "策略选择：主体居中 → 居中裁切；主体偏侧 → 位移裁切（保主体）；多主体/全景 → 模糊填充（上原图下补景，不裁掉信息）",
+        "人脸安全：裁切框上缘留在头顶上方 10%，下缘到胸口",
+        "分辨率对齐目标平台：抖音/快手/视频号 1080×1920@30fps"
+      ],
+      "steps": [
+        "filmcraft-cli probe <素材> 先量分辨率/时长/帧率（永远先探测再动手）",
+        "序列设 1080×1920@30，放置后按位移/缩放保留主体",
+        "导出 H.264：--quality 80 起步"
+      ],
+      "checks": ["导出后 probe 验证分辨率/时长；抽帧目检主体完整、不切脸"]
+    },
+    {
+      "id": "loudness-web",
+      "title": "网络平台响度标准化",
+      "apps": ["filmcraft"],
+      "goal": "成片响度对齐平台标准，避免用户手动调音量",
+      "principles": [
+        "主流短视频平台目标：integrated -14 LUFS，true peak ≤ -1 dBTP",
+        "导出时一次完成（file.exportMedia loudnessLufs 参数），不要二次压限",
+        "BGM 与人声分层：人声为主轨，BGM 侧链闪避 6-10 dB"
+      ],
+      "steps": [
+        "exec file.exportMedia {\"path\":<out>,\"format\":\"h264\",\"loudnessLufs\":-14,\"wait\":true}",
+        "probe 产物核对时长/编码/音轨"
+      ],
+      "checks": ["probe 报告音轨存在且响度参数已应用；多平台分发时每平台独立导出"]
+    },
+    {
+      "id": "srt-burn",
+      "title": "字幕烧录（SRT）",
+      "apps": ["filmcraft"],
+      "goal": "SRT 字幕导入并烧录进成片",
+      "principles": [
+        "单行 ≤ 15 个中文字符，超长拆条；每条最短停留 1 秒",
+        "位置：底部安全区，避开平台 UI（进度条/互动栏约占底部 15%）",
+        "样式统一：描边 2-3px 或半透明底条，全片一种字体"
+      ],
+      "steps": [
+        "exec captions.import {\"path\":<srt 绝对路径>}",
+        "可选 exec captions.setStyle {\"font\":…,\"size\":…,\"outline\":…}",
+        "exec file.exportMedia {\"path\":<out>,\"format\":\"h264\",\"burnCaptions\":true,\"wait\":true}"
+      ],
+      "checks": ["抽帧目检字幕：无溢出、无遮挡主体、时间轴同步"]
+    },
+    {
+      "id": "title-motion",
+      "title": "动态片头/花字（EffectCraft）",
+      "apps": ["effectcraft"],
+      "goal": "生成动态片头，叠加回剪辑或直接使用",
+      "principles": [
+        ".ecproj 是版本化 JSON —— 直接生成或模板替换文本，比逐帧描述高效",
+        "动画时长 1.5-3s：入场 0.3-0.5s 缓动（ease），停留 ≥ 1s，出场 0.3s",
+        "双出口：MP4 直用；或导出 Lottie 嵌网页预览；带 alpha 的 ProRes 4444 可叠进 FilmCraft 当图形层"
+      ],
+      "steps": [
+        "生成/填充 intro.ecproj（composition 尺寸对齐主序列）",
+        "effectcraft-cli render --comp Main --out <项目>/out/intro.mp4 <项目>/craft/intro.ecproj",
+        "或 exec file.exportLottie 导出 .json 给网页端播放"
+      ],
+      "checks": ["render 后 probe 时长/分辨率；视觉检查动画节奏（入场不突兀、停留可读完整标题）"]
+    },
+    {
+      "id": "delivery-pack",
+      "title": "多平台分发包",
+      "apps": ["filmcraft"],
+      "goal": "同一成片产出多平台版本（分辨率/帧率/响度/命名规范）",
+      "principles": [
+        "平台参数表：抖音/快手/视频号 1080×1920@30 -14LUFS；B 站/西瓜 1920×1080@30 -14LUFS",
+        "命名规范：<项目>_<平台>_v<序号>.mp4，一次导出成组不散落",
+        "每平台独立导出（各自过 loudness 与 probe），不要一份文件多处转发"
+      ],
+      "steps": [
+        "逐平台 exec file.exportMedia {\"path\":<out>,\"format\":\"h264\",\"width\":…,\"height\":…,\"loudnessLufs\":-14,\"wait\":true}",
+        "每个产物跑一次 probe 核对"
+      ],
+      "checks": ["probe 全部产物：分辨率/帧率/音轨符合平台表；文件命名一致"]
+    },
+    {
+      "id": "probe-verify",
+      "title": "通用纪律：先探测、后验证",
+      "apps": ["filmcraft", "photocraft", "effectcraft"],
+      "goal": "所有媒体操作的通用工作流纪律（来自专业剪辑技能的通用实践）",
+      "principles": [
+        "先探测再动手：永远先 probe 素材拿真实时长/分辨率/帧率/音轨，不从文件名猜",
+        "能无损不重编：剪切片段优先流复制，只在必须（精确剪切/滤镜/换格式）时重编码",
+        "做完必验证：产物 probe 一次 + 关键帧目检，报告里写明验证结果",
+        "诚实标注：成功是 Done、失败是 Failed，部分完成必须写出缺口"
+      ],
+      "steps": [
+        "任何处理前：filmcraft-cli probe <media>",
+        "处理后：filmcraft-cli probe <out> + 抽帧目检"
+      ],
+      "checks": ["probe 输出与预期一致；差异写入报告而不是含糊带过"]
+    }
+  ]
+}

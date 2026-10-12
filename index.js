@@ -890,6 +890,34 @@ export function apply(ctx) {
       },
     });
 
+    attempt({
+      name: 'artcraft_recipes',
+      description: '内置专家处理方案库：ArtCraft 家族的专业工作流配方（短剧海报、分镜批量调色、横转竖、响度标准化、SRT 字幕烧录、动态片头、多平台分发包、先探测后验证纪律）。action=list 列出全部；action=get + id 取单个配方的专业原则、执行步骤与验证清单。',
+      schema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['list', 'get'] },
+          id: { type: 'string', description: 'action=get 时的配方 id' },
+        },
+        required: ['action'],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const recipesPath = path.join(HERE, 'recipes', 'recipes.json');
+        const catalog = JSON.parse(await fs.readFile(recipesPath, 'utf8'));
+        if (String(args.action) === 'get') {
+          const r = catalog.recipes.find((x) => x.id === String(args.id ?? ''));
+          if (!r) throw new Error('配方不存在: ' + args.id + '（可用: ' + catalog.recipes.map((x) => x.id).join(', ') + '）');
+          return r;
+        }
+        return {
+          version: catalog.version,
+          recipes: catalog.recipes.map((r) => ({ id: r.id, title: r.title, apps: r.apps, goal: r.goal })),
+          hint: 'action=get + id 取完整配方（专业原则 + 执行步骤 + 验证清单）',
+        };
+      },
+    });
+
     return () => {
       for (const d of disposers) { try { d(); } catch { /* ignore */ } }
     };
