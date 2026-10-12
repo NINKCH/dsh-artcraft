@@ -14,18 +14,22 @@
 
 ## Why this exists
 
-[ArtCraft](https://getartcraft.com/apps) is a family of free, fair-source reinventions of Adobe's
-studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop), **FilmCraft**
-(Premiere Pro), **EffectCraft** (After Effects) and more. They share one superpower that most
-desktop apps don't have: **every menu item, slider and dialog is a command**, and the exact same
-commands can be driven from a headless CLI, a JSON control channel, or an MCP server. The apps
-were built for agents from day one.
+[ArtCraft](https://getartcraft.com/apps) is a family of **twelve** free, fair-source reinventions
+of Adobe's studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop),
+**VectorCraft** (Illustrator), **FilmCraft** (Premiere Pro), **LightCraft** (Lightroom),
+**PdfCraft** (Acrobat), **EffectCraft** (After Effects), **DesignCraft** (InDesign),
+**WordCraft** (Word), **DeckCraft** (PowerPoint), **GridCraft** (Excel), **CADCraft** (AutoCAD)
+and **SoundCraft** (Pro Tools). They share one superpower that most desktop apps don't have:
+**every menu item, slider and dialog is a command**, and the exact same commands can be driven
+from a headless CLI, a JSON control channel, or an MCP server. The apps were built for agents
+from day one.
 
 This plugin brings that surface into DeepSeek Harness, so an AI agent can *operate* the apps —
 not just talk about them:
 
-- **In chat** — four agent tools let any Harness session check the toolchain, run CLI commands,
-  send control-channel commands to a running app, and do bridged file operations.
+- **In chat** — eight agent tools let any Harness session check the toolchain, run CLI commands,
+  send control-channel commands to a running app, do bridged file operations, and consult a
+  per-app capability catalog.
 - **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
   no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
   a node-based AI short-drama storyboard canvas, but any front end can use it.
@@ -140,10 +144,14 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | Tool | What it does |
 |---|---|
-| `artcraft_status` | Toolchain health check: which CLIs resolved, config location, control ports, running jobs |
-| `artcraft_cli` | Run any CLI subcommand synchronously (`photocraft-cli run/batch`, `filmcraft-cli commands`, …) |
-| `artcraft_control` | One command over the JSON control channel of a *running* FilmCraft / EffectCraft |
+| `artcraft_status` | Toolchain health check: which of the 12 CLIs resolved, config location, control ports, running jobs |
+| `artcraft_cli` | Run any CLI subcommand synchronously (`photocraft-cli run/batch`, `wordcraft-cli convert`, …) |
+| `artcraft_control` | One command over the JSON control channel of a *running* app (filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980, or pass `port`) |
 | `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
+| `artcraft_discover` | Family install auto-discovery: fills missing paths, auto-corrects stale ones |
+| `artcraft_apps` | Capability catalog for all 12 apps: CLI subcommands, control ports, MCP, repo/docs links |
+| `artcraft_recipes` | Built-in expert recipes: 8 cross-app professional workflows |
+| `artcraft_update` | The plugin's own update (check / apply) |
 
 ## Driving it from the browser
 
@@ -175,7 +183,10 @@ Full route list:
 | `GET /artcraft/api/fs?op=list\|stat\|readtext&path=…` | Read directories, metadata, small text files |
 | `GET /artcraft/api/file?path=…` | Download a file — streamed, up to 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | Job lifecycle with output statting and tail logs |
-| `POST /artcraft/api/control` | Synchronous control-channel call |
+| `POST /artcraft/api/control` | Synchronous control-channel call (`app` or `port`) |
+| `GET /artcraft/api/apps[?id=…]` | Family capability catalog (12 apps) |
+| `POST /artcraft/api/discover` | Family install discovery + config self-repair |
+| `GET /artcraft/api/update/check` · `POST /artcraft/api/update/apply` | The plugin's own update |
 
 Uploads are capped at 320 MB per request (Blob direct, no base64 needed for the raw path);
 downloads stream up to 2 GB. All path arguments are **absolute** (or `base` absolute directory +
@@ -209,10 +220,14 @@ POST /artcraft/api/control
 Time accepts `seconds`, `frame` or `timecode` (internally FilmCraft counts ticks at
 254,016,000,000/s). `filmcraft-cli commands` lists the 650+ engine commands; the protocol is
 documented in [filmcraft/docs/control-protocol.md](https://github.com/storytold/filmcraft/blob/main/docs/control-protocol.md).
-EffectCraft listens the same way on its own port (default 9877).
+EffectCraft listens the same way on its own port (default 9877); VectorCraft defaults to 7979
+and LightCraft to 7980 (both built into `artcraft_control`'s `app`). The remaining apps pick
+dynamic ports: start them with `app --port PORT`, then pass `port` to `artcraft_control`. Each
+app's control surface is described in the `artcraft_apps` catalog.
 
-> PhotoCraft's control channel is an authenticated variant and is deliberately **not** proxied
-> here — for PhotoCraft the headless CLI covers everything this plugin needs.
+> PhotoCraft's control channel is an authenticated variant and PdfCraft's is file-based
+> (`--control FILE`); both are deliberately **not** proxied here — the headless CLI covers
+> everything this plugin needs.
 
 ## Working with 无限画布 (infinite-canvas)
 

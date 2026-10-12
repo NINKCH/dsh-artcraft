@@ -15,16 +15,18 @@
 ## 为什么做这个
 
 [ArtCraft](https://getartcraft.com/apps) 是一套用纯 Rust 从零重写的免费公平源代码（fair source）
-Adobe 对标工具：
-**PhotoCraft**（对标 Photoshop）、**FilmCraft**（对标 Premiere Pro）、**EffectCraft**（对标 After
-Effects）等。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、滑块、对话框都是一条
+Adobe 对标工具，共 **12 个应用**：**PhotoCraft**（Photoshop）、**VectorCraft**（Illustrator）、
+**FilmCraft**（Premiere Pro）、**LightCraft**（Lightroom）、**PdfCraft**（Acrobat）、
+**EffectCraft**（After Effects）、**DesignCraft**（InDesign）、**WordCraft**（Word）、
+**DeckCraft**（PowerPoint）、**GridCraft**（Excel）、**CADCraft**（AutoCAD）、**SoundCraft**
+（Pro Tools）。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、滑块、对话框都是一条
 命令**，而同一套命令既能从无头 CLI 调用，也能走 JSON 控制通道或 MCP——这些 App 从第一天起
 就是为 agent 设计的。
 
 本插件把这套自动化面接进 DeepSeek Harness，让 AI 不只是"谈论"这些软件，而是真的**操作**它们：
 
-- **对话里** —— 四个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
-  App 发控制通道命令、做桥接文件操作。
+- **对话里** —— 八个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
+  App 发控制通道命令、做桥接文件操作、查每个应用的能力目录。
 - **浏览器里** —— 同源 HTTP API（`/artcraft/api/*`），任何 Harness 前端都能直接调用：无 CORS、
   无密钥。它为 [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md)（节点式 AI 短剧
   分镜画布）而建，但任何前端都可用。
@@ -129,10 +131,14 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | 工具 | 用途 |
 |---|---|
-| `artcraft_status` | 工具体检：CLI 是否找到、配置目录、控制端口、进行中的任务 |
-| `artcraft_cli` | 同步执行任意 CLI 子命令（`photocraft-cli run/batch`、`filmcraft-cli commands` 等） |
-| `artcraft_control` | 向**运行中**的 FilmCraft / EffectCraft 控制通道发一条命令 |
+| `artcraft_status` | 工具体检：12 个 CLI 是否找到、配置目录、控制端口、进行中的任务 |
+| `artcraft_cli` | 同步执行任意 CLI 子命令（`photocraft-cli run/batch`、`wordcraft-cli convert` 等） |
+| `artcraft_control` | 向**运行中**的 App 控制通道发一条命令（filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980，或 port 直连） |
 | `artcraft_fs` | 桥接文件操作 —— list / stat / 读 / 写 / 建目录，路径由调用方绝对指定 |
+| `artcraft_discover` | 家族安装自动探测：填充缺失路径、自动纠正失效路径 |
+| `artcraft_apps` | 12 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 |
+| `artcraft_recipes` | 内置专家处理方案：8 套跨应用专业工作流配方 |
+| `artcraft_update` | 插件自身更新（检查 / 应用） |
 
 ## 在浏览器里驱动
 
@@ -163,7 +169,10 @@ POST /artcraft/api/job/cancel  { "id":"7f2c…" }
 | `GET /artcraft/api/fs?op=list\|stat\|readtext&path=…` | 读目录、元数据、小文本 |
 | `GET /artcraft/api/file?path=…` | 下载文件 —— 流式，上限 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | 任务生命周期，含产物探测与日志尾部 |
-| `POST /artcraft/api/control` | 控制通道同步调用 |
+| `POST /artcraft/api/control` | 控制通道同步调用（`app` 或 `port`） |
+| `GET /artcraft/api/apps[?id=…]` | 家族能力目录（12 应用） |
+| `POST /artcraft/api/discover` | 家族安装探测 + 配置自动修复 |
+| `GET /artcraft/api/update/check` · `POST /artcraft/api/update/apply` | 插件自更新 |
 
 上传单次上限 320 MB（原始路径 Blob 直传，无需 base64）；下载流式上限 2 GB。
 所有路径参数为**绝对路径**（或 `base` 绝对目录 + 相对 `rel`）—— 位置由调用方决定：
@@ -195,9 +204,12 @@ POST /artcraft/api/control
 时间可传 `seconds` / `frame` / `timecode`（FilmCraft 内部以每秒 254,016,000,000 tick 计）。
 `filmcraft-cli commands` 列出全部 650+ 引擎命令；协议详见
 [filmcraft/docs/control-protocol.md](https://github.com/storytold/filmcraft/blob/main/docs/control-protocol.md)。
-EffectCraft 同族协议，端口默认 9877。
+EffectCraft 同族协议，端口默认 9877；VectorCraft 默认 7979、LightCraft 默认 7980（`artcraft_control`
+的 `app` 已内置）。其余应用端口动态：以 `app --port PORT` 启动后，`artcraft_control` 传 `port`
+直连即可（协议同族）。每个应用的控制面详见 `artcraft_apps` 能力目录。
 
-> PhotoCraft 的控制通道是带鉴权的变体，本插件**有意不代理** —— PhotoCraft 走无头 CLI 足够。
+> PhotoCraft 的控制通道是带鉴权的变体、PdfCraft 是文件式（`--control FILE`），本插件**有意不代理**
+> —— 两者走无头 CLI 足够。
 
 ## 与无限画布（infinite-canvas）协作
 

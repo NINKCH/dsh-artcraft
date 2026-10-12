@@ -10,9 +10,10 @@
  *   1) Agent Tools（对话内直接驱动）:
  *        artcraft_status  —— 检查 12 个家族 CLI 是否可用、配置目录、控制通道配置
  *        artcraft_cli     —— 运行 12 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
- *        artcraft_control —— 向运行中的 FilmCraft/EffectCraft JSON 控制通道发一条命令
+ *        artcraft_control —— 向运行中的 FilmCraft/EffectCraft/VectorCraft/LightCraft JSON 控制通道发一条命令
  *        artcraft_fs      —— 桥接文件操作（list/stat/readtext/write/mkdir，绝对路径）
  *        artcraft_update  —— 插件自身更新（检查/应用）
+ *        artcraft_apps    —— 12 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
  *   2) HTTP API（同源 /artcraft/api/*，供无限画布等前端调用，无 CORS 问题）:
  *        GET  /artcraft/api/status     环境自检
  *        GET  /artcraft/api/fs         list / stat / readtext
@@ -22,11 +23,14 @@
  *        POST /artcraft/api/job        启动长任务（渲染/导出/批处理）
  *        POST /artcraft/api/job/cancel 取消任务
  *        POST /artcraft/api/control    控制通道同步调用（engine.execute / ui.*）
+ *        GET  /artcraft/api/apps       家族能力目录（list / ?id= 单个）
  *
  * 安全约定：
  *   - 子进程只允许 12 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
  *   - 控制通道只连 127.0.0.1，与 ArtCraft 官方协议一致（App 需以 --control 启动；
- *     PhotoCraft 的控制通道为鉴权模式，本插件不代理，故仅支持 filmcraft/effectcraft）；
+ *     已知默认端口：filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980；
+ *     PhotoCraft 控制通道为令牌鉴权模式、PdfCraft 为文件式（--control FILE），均不代理；
+ *     其余应用端口动态，用 port 参数直连）；
  *   - 本插件与 infinite-canvas 零代码耦合，仅通过 HTTP + 调用方给定路径协作。
  *
  * 信任模型：HTTP API 无鉴权，随 DSH Web GUI 仅监听回环；不要把 GUI 端口暴露到局域网。
@@ -50,7 +54,7 @@ const BINS = [
   'designcraft', 'wordcraft', 'deckcraft', 'gridcraft', 'cadcraft', 'soundcraft',
 ];
 const PKG_NAME = '@ninkch/dsh-artcraft';
-const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877 };
+const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877, vectorcraft: 7979, lightcraft: 7980 };
 
 const BODY_CAP = 2 * 1024 * 1024;            // 普通 JSON 请求体上限
 const WRITE_CAP = 320 * 1024 * 1024;         // 上传（写盘）上限
@@ -775,24 +779,25 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_control',
-      description: '向运行中的 FilmCraft(--control 9876) / EffectCraft(--control 9877) JSON 控制通道发送一条命令，如 engine.execute / ui.screenshot。PhotoCraft 控制通道为鉴权模式，不在代理范围。',
+      description: '向运行中的 ArtCraft JSON 控制通道发送一条命令（同族 JSON-lines 协议：engine.execute / engine.commands / ui.inspect / ui.screenshot…）。已知默认端口：filmcraft(--control 9876) / effectcraft(9877) / vectorcraft(7979) / lightcraft(7980)；其余应用端口动态，可传 port 直连。PhotoCraft 控制通道为令牌鉴权模式、PdfCraft 为文件式，不在代理范围。',
       schema: {
         type: 'object',
         properties: {
-          app: { type: 'string', enum: ['filmcraft', 'effectcraft'], description: '目标应用（决定端口）' },
-          method: { type: 'string', description: '如 engine.execute / ui.inspect / ui.screenshot' },
+          app: { type: 'string', enum: ['filmcraft', 'effectcraft', 'vectorcraft', 'lightcraft'], description: '目标应用（决定默认端口）' },
+          port: { type: 'number', description: '可选：直接指定端口（覆盖 app 默认；用于端口动态的应用）' },
+          method: { type: 'string', description: '如 engine.execute / engine.commands / ui.inspect / ui.screenshot' },
           params: { type: 'object', description: '命令参数' },
           timeoutMs: { type: 'number' },
         },
-        required: ['app', 'method'],
+        required: ['method'],
         additionalProperties: false,
       },
       async execute(args) {
         const cfg = await loadConfig();
-        const port = cfg.control[String(args.app)];
-        if (!port) throw new Error(`未知 app: ${args.app}`);
+        const port = Number(args.port) > 0 ? Number(args.port) : cfg.control[String(args.app ?? '')];
+        if (!(Number(port) > 0)) throw new Error('需要 app (filmcraft|effectcraft|vectorcraft|lightcraft) 或 port');
         const result = await controlCall(port, String(args.method), args.params ?? {}, { timeoutMs: args.timeoutMs });
-        return { app: args.app, port, method: args.method, result };
+        return { app: args.app ?? null, port, method: args.method, result };
       },
     });
 
@@ -924,6 +929,35 @@ export function apply(ctx) {
           version: catalog.version,
           recipes: catalog.recipes.map((r) => ({ id: r.id, title: r.title, apps: r.apps, goal: r.goal })),
           hint: 'action=get + id 取完整配方（专业原则 + 执行步骤 + 验证清单）',
+        };
+      },
+    });
+
+    attempt({
+      name: 'artcraft_apps',
+      description: 'ArtCraft 家族 12 应用的自动化能力目录：每个应用的定位、对标软件、CLI 子命令用法、控制通道端口、MCP 可用性与仓库/文档链接。action=list 列出全部；action=get + id 取单个应用的完整能力卡。要拿某应用的实时命令注册表，用 artcraft_cli 跑该应用的 commands 子命令。',
+      schema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['list', 'get'] },
+          id: { type: 'string', description: 'action=get 时的应用 id（如 wordcraft）' },
+        },
+        required: ['action'],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const catalogPath = path.join(HERE, 'apps', 'catalog.json');
+        const catalog = JSON.parse(await fs.readFile(catalogPath, 'utf8'));
+        if (String(args.action) === 'get') {
+          const a = catalog.apps.find((x) => x.id === String(args.id ?? ''));
+          if (!a) throw new Error('应用不存在: ' + args.id + '（可用: ' + catalog.apps.map((x) => x.id).join(', ') + '）');
+          return a;
+        }
+        return {
+          version: catalog.version,
+          controlProtocol: catalog.controlProtocol,
+          apps: catalog.apps.map((a) => ({ id: a.id, name: a.name, tagline: a.tagline, ref: a.ref, cli: a.cli, control: a.control, mcp: a.mcp, stage: a.stage })),
+          hint: 'action=get + id 取完整能力卡（子命令用法 + 控制端口 + 仓库/文档链接）',
         };
       },
     });
@@ -1104,12 +1138,30 @@ export function apply(ctx) {
         });
       }),
 
+      makeRoute(`/${NAME}/api/apps`, async (req, res) => {
+        if (req.method !== 'GET') throw new Error('仅支持 GET');
+        const url = new URL(req.url, 'http://x');
+        const id = url.searchParams.get('id');
+        const catalog = JSON.parse(await fs.readFile(path.join(HERE, 'apps', 'catalog.json'), 'utf8'));
+        if (id) {
+          const a = catalog.apps.find((x) => x.id === id);
+          if (!a) throw new Error('应用不存在: ' + id + '（可用: ' + catalog.apps.map((x) => x.id).join(', ') + '）');
+          sendJson(res, 200, a);
+          return;
+        }
+        sendJson(res, 200, {
+          version: catalog.version,
+          controlProtocol: catalog.controlProtocol,
+          apps: catalog.apps.map((a) => ({ id: a.id, name: a.name, tagline: a.tagline, ref: a.ref, cli: a.cli, control: a.control, mcp: a.mcp, stage: a.stage })),
+        });
+      }),
+
       makeRoute(`/${NAME}/api/control`, async (req, res) => {
         if (req.method !== 'POST') throw new Error('仅支持 POST');
         const cfg = await loadConfig();
         const body = await readJson(req);
         const port = body.port ?? cfg.control[String(body.app ?? '')];
-        if (!(Number(port) > 0)) throw new Error('需要 app (filmcraft|effectcraft) 或 port');
+        if (!(Number(port) > 0)) throw new Error('需要 app (filmcraft|effectcraft|vectorcraft|lightcraft) 或 port');
         const result = await controlCall(
           Number(port),
           String(body.method),
