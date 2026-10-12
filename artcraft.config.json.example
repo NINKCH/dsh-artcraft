@@ -6,7 +6,12 @@
     "lightcraft": "C:/Program Files/LightCraft",
     "pdfcraft": "C:/Program Files/PdfCraft",
     "effectcraft": "C:/Program Files/EffectCraft",
-    "designcraft": "C:/Program Files/DesignCraft"
+    "designcraft": "C:/Program Files/DesignCraft",
+    "wordcraft": "C:/Program Files/WordCraft",
+    "deckcraft": "C:/Program Files/DeckCraft",
+    "gridcraft": "C:/Program Files/GridCraft",
+    "cadcraft": "C:/Program Files/CADCraft",
+    "soundcraft": "C:/Program Files/SoundCraft"
   },
   "control": {
     "filmcraft": 9876,

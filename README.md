@@ -268,7 +268,7 @@ a web UI.
 
 The HTTP surface has **no authentication** and rides on the Harness web server, which listens on
 loopback only — treat the port as trusted-local and don't expose it to a network; put a reverse
-proxy with auth in front if you must. Child processes are locked to the seven allow-listed
+proxy with auth in front if you must. Child processes are locked to the twelve allow-listed
 family CLIs; the control channel only ever dials `127.0.0.1`.
 
 ## Publishing
