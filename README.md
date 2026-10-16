@@ -30,12 +30,13 @@ not just talk about them:
 - **In chat** — nine agent tools let any Harness session check the toolchain, run CLI commands,
   send control-channel commands to a running app, do bridged file operations, run delivery QC,
   and consult a per-app capability catalog.
-- **A bundled craft skill pack** — nine skills (`artcraft-ops`, `artcraft-shot-language`,
+- **A bundled craft skill pack** — eleven skills (`artcraft-ops`, `artcraft-shot-language`,
   `artcraft-edit-rhythm`, `artcraft-color-light`, `artcraft-sound-design`, `artcraft-motion-vfx`,
-  `artcraft-delivery-qc`, `artcraft-style-bible`, `artcraft-film-study`) teach the agent *how* to
-  drive the suite fluently, which effect to reach for, how to design shot language, pacing, grade
-  and sound, how to lock a consistent look across episodes, and how to break a film down into
-  evidence. They ship inside the plugin and load on demand.
+  `artcraft-delivery-qc`, `artcraft-style-bible`, `artcraft-film-study`, `artcraft-batch-pipeline`,
+  `artcraft-multicam`) teach the agent *how* to drive the suite fluently, which effect to reach for,
+  how to design shot language, pacing, grade and sound, how to lock a consistent look across
+  episodes, how to break a film down into evidence, how to run batches, and how to cut multicam.
+  They ship inside the plugin and load on demand (English index: `skills/README.md`).
 - **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
   no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
   a node-based AI short-drama storyboard canvas, but any front end can use it.
@@ -161,7 +162,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_apps` | Capability catalog for all 13 apps: CLI subcommands, control ports, MCP, repo/docs links, plus measured command-family stats |
 | `artcraft_qc` | Delivery QC: family probe + platform-spec checks returning ok/warn/fail/manual with fix commands (video/audio/image/pdf/doc/sheet/deck/fig/cad) |
 | `artcraft_live` | Control-channel liveness: which apps are running right now (ready for live tuning) |
-| `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 11 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles) |
+| `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 14 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles, cleanup/restore, social pack, long-form clips) |
 | `artcraft_update` | The plugin's own update (check / apply) |
 
 ## Driving it from the browser
@@ -253,6 +254,16 @@ The two plugins are decoupled — they meet only on HTTP and the disk layout. Th
 
 If you're building a similar front end, mirror that contract: project slug as folder name, keep
 the `media · craft · out` triad, and everything composes.
+
+**Endpoints a front end can use directly:**
+
+| Endpoint | Use it for |
+|---|---|
+| `GET /artcraft/api/apps` | 13-app capability catalog + command-family stats (a "capabilities" panel) |
+| `GET /artcraft/api/skills` | The 11 bundled skills with their reference files (a "skills" section) |
+| `GET /artcraft/api/live` | Control-channel liveness (live tuning vs headless runs) |
+| `GET /artcraft/api/qc?path=…&platform=…` | Artefact QC — chain it right after an export and show a PASS/WARN badge; on failure surface `checks[].fix` verbatim |
+| `POST /artcraft/api/job` + `GET ?id=` | Long-job lifecycle (render/export/batch) |
 
 ## Recipes
 

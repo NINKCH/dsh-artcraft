@@ -363,6 +363,64 @@
         { "app": "filmcraft", "cmd": "file.exportMedia", "note": "交付：字幕内嵌或外挂（按平台要求）" }
       ],
       "verify": ["各语言时间轴一致", "非拉丁文字无缺字/断行错误", "字幕在安全区内", "配音后响度仍达标"]
+    },
+    {
+      "id": "cleanup-restore",
+      "title": "素材清理与修复（降噪/稳定/去杂物）",
+      "skills": ["artcraft-motion-vfx", "artcraft-color-light", "artcraft-batch-pipeline"],
+      "when": "素材有噪声、抖动、脏点或需要局部抹除",
+      "steps": [
+        { "app": "filmcraft", "cmd": "probe", "note": "先判断素材问题类型（噪点/抖动/闪烁/压缩块）" },
+        { "app": "effectcraft", "cmd": "track.stabilize", "note": "稳定：先分析再应用，稳定后需缩放补偿黑边" },
+        { "app": "effectcraft", "cmd": "effect.apply", "params": { "effect": "ec.noise.removegrain" }, "note": "去颗粒；与 addGrain 配对（去多了会塑料感）" },
+        { "app": "effectcraft", "cmd": "effect.apply", "params": { "effect": "ec.blur.camerashakedeblur" }, "note": "轻度抖动模糊修复（重，先渲单帧）" },
+        { "app": "effectcraft", "cmd": "effect.apply", "params": { "effect": "ec.distort.rollingshutterrepair" }, "note": "手机/运动相机的卷帘快门果冻效应" },
+        { "app": "effectcraft", "cmd": "mask.new", "note": "局部抹除：先用遮罩圈定区域（配合 mask.featherPoint.add 羽化）" },
+        { "app": "effectcraft", "cmd": "effect.apply", "params": { "effect": "ec.generate.fill" }, "note": "遮罩内填充/克隆修补（复杂处用 ec.distort.meshwarp 精修）" },
+        { "app": "filmcraft", "cmd": "mask.track", "note": "若在剪辑层处理：遮罩跟踪（FilmCraft masks.track）" },
+        { "app": "lightcraft", "cmd": "develop.set", "params": { "control": "detail.nrLuminance" }, "note": "照片类素材用 LightCraft 降噪（detail.nr* 7 项）" },
+        { "app": "effectcraft", "cmd": "render-frame", "note": "先单帧复核，再半分辨率预演，最后全质量" }
+      ],
+      "verify": ["处理前后同一帧对比（去噪未糊细节）", "稳定后无黑边/无呼吸感", "抹除处无可见接缝", "抽帧目检通过"]
+    },
+    {
+      "id": "social-pack",
+      "title": "社交分发包（一源多平台 + 封面）",
+      "skills": ["artcraft-delivery-qc", "artcraft-shot-language", "artcraft-edit-rhythm"],
+      "when": "一条正片要出多平台版本（横屏 + 竖屏 + 方形）与配套封面/缩略图",
+      "steps": [
+        { "app": "filmcraft", "cmd": "probe", "note": "先确认源规格与时长上限（各平台不同）" },
+        { "app": "filmcraft", "cmd": "file.newSequence", "params": { "width": 1080, "height": 1920, "fps": 30 }, "note": "竖屏版（抖音/Reels/Shorts）" },
+        { "app": "filmcraft", "cmd": "timeline.place", "note": "竖屏重排：保留主体，必要处加运动跟随" },
+        { "app": "filmcraft", "cmd": "file.exportMedia", "params": { "format": "h264", "width": 1080, "height": 1920 }, "note": "竖屏导出（-14 LUFS）" },
+        { "app": "filmcraft", "cmd": "file.exportMedia", "params": { "format": "h264", "width": 1920, "height": 1080 }, "note": "横屏导出（B 站/YouTube）" },
+        { "app": "filmcraft", "cmd": "render", "params": { "seconds": 3, "out": "<项目>/craft/cover-frame.png" }, "note": "抓封面底帧（挑信息量最大的一帧）" },
+        { "app": "photocraft", "cmd": "run", "note": "封面加字（显式字体、层级 ≥2 级、留 5% 安全边距）" },
+        { "app": "deckcraft", "cmd": "render", "note": "方形/多尺寸变体：用幻灯片模板一次出 1:1 / 9:16 / 16:9" },
+        { "app": "filmcraft", "cmd": "captions.export", "note": "导出各平台所需字幕格式（srt/vtt/scc/ttml）" },
+        { "app": "filmcraft", "cmd": "metadata.set", "note": "写标题/描述/场景标签（平台上传用）" }
+      ],
+      "verify": ["各平台规格逐个 artcraft_qc 通过", "封面文字在安全区内且缩略图可读", "字幕格式与平台匹配", "响度全平台达标"]
+    },
+    {
+      "id": "longform-clips",
+      "title": "长素材切片（直播/课程/访谈 → 短视频）",
+      "skills": ["artcraft-edit-rhythm", "artcraft-delivery-qc", "artcraft-batch-pipeline"],
+      "when": "几十分钟到几小时的长录，要切出多个可发布的短片",
+      "steps": [
+        { "app": "filmcraft", "cmd": "probe", "note": "长素材先探（注意文件体积与帧率/VFR）" },
+        { "app": "filmcraft", "cmd": "media.createProxies", "note": "长素材先建代理（剪辑流畅），导出前 media.reconnectFullRes" },
+        { "app": "filmcraft", "cmd": "transcript.generate", "note": "先转写：长素材靠文本定位远比拖时间线高效" },
+        { "app": "filmcraft", "cmd": "transcript.search", "params": { "query": "<关键词>" }, "note": "按关键词定位候选片段" },
+        { "app": "filmcraft", "cmd": "transcript.removePauses", "note": "去停顿（口播类大幅压缩时长）" },
+        { "app": "filmcraft", "cmd": "transcript.removeFillers", "note": "去口头禅" },
+        { "app": "filmcraft", "cmd": "transcript.createCaptions", "note": "生成字幕（短视频强制字幕）" },
+        { "app": "filmcraft", "cmd": "timeline.razor", "note": "按定位点切出片段（timeline.place 到新序列）" },
+        { "app": "filmcraft", "cmd": "captions.setStyle", "note": "短视频字幕样式（大字号、安全区）" },
+        { "app": "filmcraft", "cmd": "file.exportMedia", "params": { "format": "h264", "width": 1080, "height": 1920 }, "note": "每个切片独立导出（可批量脚本）" },
+        { "app": "filmcraft", "cmd": "media.reconnectFullRes", "note": "导出后切回全分辨率（若还要继续剪）" }
+      ],
+      "verify": ["每个切片有独立开头与结尾（不留半句）", "字幕完整且与语音同步", "artcraft_qc 逐条通过", "命名规范且分批次存放"]
     }
   ]
 }
