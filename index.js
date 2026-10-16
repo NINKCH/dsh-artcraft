@@ -559,7 +559,7 @@ function dig(obj, keys, depth = 0) {
   return null;
 }
 
-async function runQc(cfg, { path: rawPath, platform, kind: wantKind } = {}) {
+async function runQc(cfg, { path: rawPath, platform, kind: wantKind, live: wantLive = true } = {}) {
   const file = resolveCallerPath(rawPath);
   const st = await fs.stat(file).catch(() => null);
   if (!st || !st.isFile()) throw new Error('文件不存在或不是常规文件: ' + file);
@@ -663,6 +663,56 @@ async function runQc(cfg, { path: rawPath, platform, kind: wantKind } = {}) {
     if (k.kind === 'deck') add('deck.review', 'manual', '动画/转场与备注需在应用内核对', 'artcraft_cli { bin:"deckcraft", args:["commands","animation"] }');
   }
 
+  // 运行中 App 的实测信号（QC v2）：示波器 / 声音体检 / 字幕长度 / 合成能力
+  let liveInfo = null;
+  const appChecks = [];
+  if (wantLive) {
+    try {
+      liveInfo = await probeLiveApps(cfg);
+      const liveApps = new Set(liveInfo.apps.filter((a) => a.live).map((a) => a.app));
+      checks.push({
+        id: 'app.live',
+        level: liveInfo.live ? 'ok' : 'manual',
+        detail: liveInfo.live ? `控制通道可达：${[...liveApps].join(' / ')}` : '无运行中的控制通道（无头 CLI 已足够；需信号级实测时以 --control 启动 App）',
+      });
+      const brief = (v) => { const s = JSON.stringify(v ?? null); return s && s.length > 360 ? s.slice(0, 360) + '…' : s; };
+      if (liveApps.has('filmcraft')) {
+        const port = cfg.control.filmcraft;
+        try {
+          const sc = await controlCall(port, 'scopes.read', { scopes: ['waveform', 'vectorscopeYuv', 'histogram'] }, { timeoutMs: 4000 });
+          appChecks.push({ app: 'filmcraft', method: 'scopes.read', result: brief(sc) });
+          checks.push({ id: 'app.scopes', level: 'ok', detail: '已取 FilmCraft 示波器读数（详见 appChecks）' });
+        } catch (e) { checks.push({ id: 'app.scopes', level: 'manual', detail: '示波器读取失败：' + String(e?.message ?? e).slice(0, 120) }); }
+        try {
+          const es = await controlCall(port, 'essentialSound.inspect', {}, { timeoutMs: 4000 });
+          appChecks.push({ app: 'filmcraft', method: 'essentialSound.inspect', result: brief(es) });
+          checks.push({ id: 'app.audio', level: 'ok', detail: '已取 Essential Sound 体检（详见 appChecks）' });
+        } catch (e) { checks.push({ id: 'app.audio', level: 'manual', detail: '声音体检失败：' + String(e?.message ?? e).slice(0, 120) }); }
+        try {
+          const caps = await controlCall(port, 'captions.list', {}, { timeoutMs: 4000 });
+          const arr = Array.isArray(caps) ? caps : (caps?.captions ?? []);
+          const texts = arr.map((c) => String(c?.text ?? '')).filter(Boolean);
+          const tooLong = texts.filter((t) => t.length > 20);
+          checks.push({
+            id: 'app.captions',
+            level: texts.length === 0 ? 'manual' : (tooLong.length ? 'warn' : 'ok'),
+            detail: texts.length === 0 ? '当前序列未见字幕条目' : `${texts.length} 条字幕${tooLong.length ? `，其中 ${tooLong.length} 条超过 20 字（竖屏建议 ≤15 字，横屏 ≤20）` : '，长度合规'}`,
+            ...(tooLong.length ? { fix: 'captions.split / captions.setText 拆分或精简；并确认字幕在安全区内' } : {}),
+          });
+        } catch (e) { checks.push({ id: 'app.captions', level: 'manual', detail: '字幕清点失败：' + String(e?.message ?? e).slice(0, 120) }); }
+      }
+      if (liveApps.has('effectcraft')) {
+        try {
+          const caps = await controlCall(cfg.control.effectcraft, 'app.capabilities', {}, { timeoutMs: 4000 });
+          appChecks.push({ app: 'effectcraft', method: 'app.capabilities', result: brief(caps) });
+          checks.push({ id: 'app.effectcraft', level: 'ok', detail: '已取 EffectCraft 能力表（命令数/效果数，详见 appChecks）' });
+        } catch (e) { checks.push({ id: 'app.effectcraft', level: 'manual', detail: '能力表读取失败：' + String(e?.message ?? e).slice(0, 120) }); }
+      }
+    } catch (e) {
+      checks.push({ id: 'app.live', level: 'manual', detail: '活性探测失败：' + String(e?.message ?? e).slice(0, 120) });
+    }
+  }
+
   const fails = checks.filter((c) => c.level === 'fail').length;
   const warns = checks.filter((c) => c.level === 'warn').length;
   const manuals = checks.filter((c) => c.level === 'manual').length;
@@ -675,6 +725,8 @@ async function runQc(cfg, { path: rawPath, platform, kind: wantKind } = {}) {
     verdict: fails ? 'fail' : warns ? 'warn' : manuals ? 'pass-with-manual-checks' : 'pass',
     counts: { fail: fails, warn: warns, manual: manuals, ok: checks.filter((c) => c.level === 'ok').length },
     checks,
+    appChecks,
+    live: liveInfo ? { live: liveInfo.live, apps: liveInfo.apps.map((a) => ({ app: a.app, port: a.port, live: a.live })) } : null,
     probe,
     rawTail: raw ? raw.slice(-1200) : null,
   };
@@ -1177,7 +1229,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_recipes',
-      description: '内置专家处理方案库（v2）：8 套专业配方（短剧海报、分镜批量调色、横转竖、响度标准化、字幕生成与烧录、动态片头、多平台分发包、先探测后验证纪律）+ 11 条「任务 → 技能 → 命令链」编排模板（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付、文档交付、批量横转竖、封面缩略图、多语言字幕）。action=list 列配方；action=get + id 取配方详情；action=chains 列编排链；action=chain + id 取完整命令链。配方中的 skills 字段指名应先读的技能包。',
+      description: '内置专家处理方案库（v2）：8 套专业配方（短剧海报、分镜批量调色、横转竖、响度标准化、字幕生成与烧录、动态片头、多平台分发包、先探测后验证纪律）+ 14 条「任务 → 技能 → 命令链」编排模板（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付、文档交付、批量横转竖、封面缩略图、多语言字幕、素材清理修复、社交分发包、长素材切片）。action=list 列配方；action=get + id 取配方详情；action=chains 列编排链；action=chain + id 取完整命令链。配方中的 skills 字段指名应先读的技能包。',
       schema: {
         type: 'object',
         properties: {
@@ -1249,20 +1301,21 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_qc',
-      description: '交付质检（确定性规则）：对产物跑家族探针并按平台规格核对，返回 PASS/WARN/FAIL/MANUAL 清单与修复命令。支持 video/audio/image/pdf/doc/sheet/deck/fig/cad。用法：path=产物绝对路径；platform 可选（bilibili|youtube|douyin|reels|shorts|wechat|broadcast|podcast）核对画幅/帧率/响度目标；kind 可选，强制指定类型。只报事实与实测值，判定留给调用方。',
+      description: '交付质检（确定性规则）：对产物跑家族探针并按平台规格核对，返回 PASS/WARN/FAIL/MANUAL 清单与修复命令。支持 video/audio/image/pdf/doc/sheet/deck/fig/cad。用法：path=产物绝对路径；platform 可选（bilibili|youtube|douyin|reels|shorts|wechat|broadcast|podcast）核对画幅/帧率/响度目标；kind 可选，强制指定类型；live 默认 true——若检测到运行中的 App，会额外取示波器读数（filmcraft scopes.read）、Essential Sound 体检、字幕长度与 EffectCraft 能力表（结果在 appChecks）。只报事实与实测值，判定留给调用方。',
       schema: {
         type: 'object',
         properties: {
           path: { type: 'string', description: '待检产物绝对路径（或 ~/ 展开）' },
           platform: { type: 'string', enum: Object.keys(PLATFORM_SPECS), description: '可选：目标平台，用于规格核对' },
           kind: { type: 'string', enum: QC_KINDS.map((k) => k.kind), description: '可选：强制指定文件类型' },
+          live: { type: 'boolean', description: '可选：是否探测运行中的 App 做信号级检查（默认 true）' },
         },
         required: ['path'],
         additionalProperties: false,
       },
       async execute(args) {
         const cfg = await loadConfig();
-        return runQc(cfg, { path: args.path, platform: args.platform, kind: args.kind });
+        return runQc(cfg, { path: args.path, platform: args.platform, kind: args.kind, live: args.live !== false });
       },
     });
 
@@ -1500,6 +1553,7 @@ export function apply(ctx) {
             path: url.searchParams.get('path') ?? url.searchParams.get('rel'),
             platform: url.searchParams.get('platform') ?? undefined,
             kind: url.searchParams.get('kind') ?? undefined,
+            live: url.searchParams.get('live') !== '0' && url.searchParams.get('live') !== 'false',
           }));
           return;
         }
