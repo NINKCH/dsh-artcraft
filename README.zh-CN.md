@@ -15,18 +15,22 @@
 ## 为什么做这个
 
 [ArtCraft](https://getartcraft.com/apps) 是一套用纯 Rust 从零重写的免费公平源代码（fair source）
-Adobe 对标工具，共 **12 个应用**：**PhotoCraft**（Photoshop）、**VectorCraft**（Illustrator）、
+Adobe 对标工具，共 **13 个应用**：**PhotoCraft**（Photoshop）、**VectorCraft**（Illustrator）、
 **FilmCraft**（Premiere Pro）、**LightCraft**（Lightroom）、**PdfCraft**（Acrobat）、
 **EffectCraft**（After Effects）、**DesignCraft**（InDesign）、**WordCraft**（Word）、
 **DeckCraft**（PowerPoint）、**GridCraft**（Excel）、**CADCraft**（AutoCAD）、**SoundCraft**
-（Pro Tools）。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、滑块、对话框都是一条
-命令**，而同一套命令既能从无头 CLI 调用，也能走 JSON 控制通道或 MCP——这些 App 从第一天起
-就是为 agent 设计的。
+（Pro Tools）、**FigCraft**（Figma）。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、
+滑块、对话框都是一条命令**，而同一套命令既能从无头 CLI 调用，也能走 JSON 控制通道或 MCP——
+这些 App 从第一天起就是为 agent 设计的。
 
 本插件把这套自动化面接进 DeepSeek Harness，让 AI 不只是"谈论"这些软件，而是真的**操作**它们：
 
 - **对话里** —— 八个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
   App 发控制通道命令、做桥接文件操作、查每个应用的能力目录。
+- **随插件分发的技能包** —— 七个技能（`artcraft-ops`、`artcraft-shot-language`、
+  `artcraft-edit-rhythm`、`artcraft-color-light`、`artcraft-sound-design`、`artcraft-motion-vfx`、
+  `artcraft-delivery-qc`）教 agent 怎么调得顺、什么时候用哪种效果、镜头语言与节奏怎么设计、
+  影调/声音/交付怎么把关；随包内置、按需加载。
 - **浏览器里** —— 同源 HTTP API（`/artcraft/api/*`），任何 Harness 前端都能直接调用：无 CORS、
   无密钥。它为 [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md)（节点式 AI 短剧
   分镜画布）而建，但任何前端都可用。
@@ -137,7 +141,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_fs` | 桥接文件操作 —— list / stat / 读 / 写 / 建目录，路径由调用方绝对指定 |
 | `artcraft_discover` | 家族安装自动探测：填充缺失路径、自动纠正失效路径 |
 | `artcraft_apps` | 12 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 |
-| `artcraft_recipes` | 内置专家处理方案：8 套跨应用专业工作流配方 |
+| `artcraft_recipes` | 内置专家配方（8 套）**与 8 条「任务→技能→命令链」编排**（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付） |
 | `artcraft_update` | 插件自身更新（检查 / 应用） |
 
 ## 在浏览器里驱动
@@ -262,7 +266,7 @@ NVENC 硬编）、ProRes、DNxHR，附 EBU R128 响度归一与字幕烧录。�
 ## 安全与信任模型
 
 HTTP 面无鉴权，挂在 Harness Web 服务之下（仅回环监听）—— 把端口当本机可信处理，**不要暴露
-到网络**；确需远程请加带鉴权的反向代理。子进程锁定 12 个白名单家族 CLI；控制通道只会拨
+到网络**；确需远程请加带鉴权的反向代理。子进程锁定 13 个白名单家族 CLI；控制通道只会拨
 `127.0.0.1`。
 
 ## 发布

@@ -1,11 +1,13 @@
 {
-  "version": 1,
-  "updated": "2026-10-10",
+  "version": 2,
+  "updated": "2026-10-12",
+  "note": "v2：每套配方标注应先读的技能（skills 字段）；新增 chains —— 面向常见后期任务的『任务 → 技能 → 命令链』编排模板，命令 id 均为家族实测命令。技能包随插件分发（@ninkch/dsh-artcraft/skills）。",
   "recipes": [
     {
       "id": "poster-short-drama",
       "title": "短剧海报（竖版）",
       "apps": ["photocraft"],
+      "skills": ["artcraft-ops", "artcraft-shot-language"],
       "goal": "生成竖版短剧海报：标题层级、装饰元素、无损输出",
       "principles": [
         "视觉层级：主标题 → 副标题 → 装饰元素，字号/字重至少差 2 级，同屏不超过 3 个信息层",
@@ -24,17 +26,20 @@
     {
       "id": "storyboard-color-grade",
       "title": "分镜批量调色（一致性）",
-      "apps": ["photocraft"],
+      "apps": ["photocraft", "lightcraft"],
+      "skills": ["artcraft-color-light", "artcraft-ops"],
       "goal": "整批分镜图统一色调，保持跨镜一致性",
       "principles": [
         "先定基调再微调：一条柔和 S 曲线 + 少量 vibrance，避免逐张各调各的",
         "保护肤色：调整幅度宁小勿大，人脸偏色比不够风格化更伤观感",
         "锐化放在调色之后（amount 60-80），避免锐化放大噪点",
-        "actions.json 一处定义、整批复用，保证批次内完全一致"
+        "actions.json / 预设一处定义、整批复用，保证批次内完全一致",
+        "LightCraft 路线：develop.controls 122 个控制按分区顺序调（profile→wb→light→curve→color→grading→detail→optics），再 preset.create 固化"
       ],
       "steps": [
         "写 craft/grade.json：[{\"cmd\":\"layer.newAdjustmentLayer.curves\",\"params\":{\"points\":[[0,0],[64,48],[192,212],[255,255]]}},{\"cmd\":\"filter.sharpen.smartSharpen\",\"params\":{\"amount\":80}}]",
         "photocraft-cli batch --actions <项目>/craft/grade.json --in <项目>/media --out <项目>/out/graded",
+        "或 LightCraft：run --library <库> develop.set control=light.exposure value=… 逐项设置后 preset.create",
         "抽 2-3 张对比原图检查，不满意只调曲线中段（64,48 / 192,212 两点）重跑"
       ],
       "checks": ["抽样对比：同场景相邻分镜色调一致；高光不过曝、暗部不死黑"]
@@ -43,6 +48,7 @@
       "id": "vertical-reframe",
       "title": "横转竖重构图",
       "apps": ["filmcraft", "photocraft"],
+      "skills": ["artcraft-shot-language", "artcraft-ops"],
       "goal": "16:9 素材适配 9:16 竖屏，三种策略按画面主体选择",
       "principles": [
         "策略选择：主体居中 → 居中裁切；主体偏侧 → 位移裁切（保主体）；多主体/全景 → 模糊填充（上原图下补景，不裁掉信息）",
@@ -51,7 +57,7 @@
       ],
       "steps": [
         "filmcraft-cli probe <素材> 先量分辨率/时长/帧率（永远先探测再动手）",
-        "序列设 1080×1920@30，放置后按位移/缩放保留主体",
+        "序列设 1080×1920@30（file.newSequence），放置后按位移/缩放保留主体",
         "导出 H.264：--quality 80 起步"
       ],
       "checks": ["导出后 probe 验证分辨率/时长；抽帧目检主体完整、不切脸"]
@@ -59,50 +65,58 @@
     {
       "id": "loudness-web",
       "title": "网络平台响度标准化",
-      "apps": ["filmcraft"],
+      "apps": ["filmcraft", "soundcraft"],
+      "skills": ["artcraft-sound-design", "artcraft-delivery-qc"],
       "goal": "成片响度对齐平台标准，避免用户手动调音量",
       "principles": [
-        "主流短视频平台目标：integrated -14 LUFS，true peak ≤ -1 dBTP",
-        "导出时一次完成（file.exportMedia loudnessLufs 参数），不要二次压限",
-        "BGM 与人声分层：人声为主轨，BGM 侧链闪避 6-10 dB"
+        "主流短视频平台目标：integrated -14 LUFS，true peak ≤ -1 dBTP；广播 -23 LUFS / -2 dBTP",
+        "用 essentialSound.autoMatch 一次到位，不要二次压限",
+        "BGM 与人声分层：人声为主轨，用 essentialSound.generateDucking 自动闪避 6-10 dB"
       ],
       "steps": [
-        "exec file.exportMedia {\"path\":<out>,\"format\":\"h264\",\"loudnessLufs\":-14,\"wait\":true}",
-        "probe 产物核对时长/编码/音轨"
+        "essentialSound.setType {type:\"dialogue\"} → essentialSound.set {key:\"repair.noise…\"}",
+        "essentialSound.autoMatch {target:-14}",
+        "essentialSound.generateDucking（音乐轨避让对白）",
+        "exec file.exportMedia {\"path\":<out>,\"format\":\"h264\",\"loudnessLufs\":-14,\"wait\":true}"
       ],
-      "checks": ["probe 报告音轨存在且响度参数已应用；多平台分发时每平台独立导出"]
+      "checks": ["probe 报告音轨存在且响度参数已应用；SoundCraft 侧跑 session.audio_health 体检"]
     },
     {
       "id": "srt-burn",
-      "title": "字幕烧录（SRT）",
+      "title": "字幕生成/导入与烧录",
       "apps": ["filmcraft"],
-      "goal": "SRT 字幕导入并烧录进成片",
+      "skills": ["artcraft-edit-rhythm", "artcraft-delivery-qc"],
+      "goal": "由转写生成字幕或导入 SRT，并烧录进成片",
       "principles": [
         "单行 ≤ 15 个中文字符，超长拆条；每条最短停留 1 秒",
-        "位置：底部安全区，避开平台 UI（进度条/互动栏约占底部 15%）",
-        "样式统一：描边 2-3px 或半透明底条，全片一种字体"
+        "位置：底部安全区，避开平台 UI（进度条/互动栏约占底部 12-15%）",
+        "样式统一：描边 2-3px 或半透明底条，全片一种字体（captions.setStyle 一次设定）",
+        "家族自带转写：transcript.generate 无需外部工具；去停顿/去口头禅可直接粗剪"
       ],
       "steps": [
-        "exec captions.import {\"path\":<srt 绝对路径>}",
-        "可选 exec captions.setStyle {\"font\":…,\"size\":…,\"outline\":…}",
-        "exec file.exportMedia {\"path\":<out>,\"format\":\"h264\",\"burnCaptions\":true,\"wait\":true}"
+        "（可选）transcript.generate {model:\"whisper-base\", language:\"auto\"} → transcript.removePauses → transcript.removeFillers",
+        "transcript.createCaptions {maxChars, lines, minSeconds, maxSeconds} 或 captions.import {path}",
+        "captions.setStyle / captions.setTrack 统一字体与轨道格式",
+        "file.exportMedia 带字幕输出（或 graphics.upgradeCaption 做花字动效）"
       ],
       "checks": ["抽帧目检字幕：无溢出、无遮挡主体、时间轴同步"]
     },
     {
       "id": "title-motion",
-      "title": "动态片头/花字（EffectCraft）",
-      "apps": ["effectcraft"],
+      "title": "动态片头/花字",
+      "apps": ["effectcraft", "filmcraft"],
+      "skills": ["artcraft-motion-vfx", "artcraft-shot-language"],
       "goal": "生成动态片头，叠加回剪辑或直接使用",
       "principles": [
         ".ecproj 是版本化 JSON —— 直接生成或模板替换文本，比逐帧描述高效",
-        "动画时长 1.5-3s：入场 0.3-0.5s 缓动（ease），停留 ≥ 1s，出场 0.3s",
-        "双出口：MP4 直用；或导出 Lottie 嵌网页预览；带 alpha 的 ProRes 4444 可叠进 FilmCraft 当图形层"
+        "动画时长 1.5-3s：入场 0.3-0.5s 缓动（keys.easyEase），停留 ≥ 1s，出场 0.3s",
+        "先渲单帧再渲全片：render-frame 看静帧 → 3 秒试片 → 全片",
+        "FilmCraft 侧优先用图形模板：graphics.template.list → graphics.template.apply（带 values）"
       ],
       "steps": [
         "生成/填充 intro.ecproj（composition 尺寸对齐主序列）",
-        "effectcraft-cli render --comp Main --out <项目>/out/intro.mp4 <项目>/craft/intro.ecproj",
-        "或 exec file.exportLottie 导出 .json 给网页端播放"
+        "effectcraft-cli render-frame --time 1 --out preview.png（先看静帧）",
+        "effectcraft-cli render --comp Main --out <项目>/out/intro.mp4 <项目>/craft/intro.ecproj"
       ],
       "checks": ["render 后 probe 时长/分辨率；视觉检查动画节奏（入场不突兀、停留可读完整标题）"]
     },
@@ -110,34 +124,193 @@
       "id": "delivery-pack",
       "title": "多平台分发包",
       "apps": ["filmcraft"],
+      "skills": ["artcraft-delivery-qc"],
       "goal": "同一成片产出多平台版本（分辨率/帧率/响度/命名规范）",
       "principles": [
         "平台参数表：抖音/快手/视频号 1080×1920@30 -14LUFS；B 站/西瓜 1920×1080@30 -14LUFS",
         "命名规范：<项目>_<平台>_v<序号>.mp4，一次导出成组不散落",
-        "每平台独立导出（各自过 loudness 与 probe），不要一份文件多处转发"
+        "每平台独立导出（各自过 loudness 与 probe），不要一份文件多处转发",
+        "需要交接时同时导出交换格式：file.exportInterchange（otio/fcpxml/aaf/omf）"
       ],
       "steps": [
         "逐平台 exec file.exportMedia {\"path\":<out>,\"format\":\"h264\",\"width\":…,\"height\":…,\"loudnessLufs\":-14,\"wait\":true}",
-        "每个产物跑一次 probe 核对"
+        "每个产物跑一次 probe 核对",
+        "需要交接：file.exportInterchange {format:\"otio\", path:<out.otio>}"
       ],
       "checks": ["probe 全部产物：分辨率/帧率/音轨符合平台表；文件命名一致"]
     },
     {
       "id": "probe-verify",
       "title": "通用纪律：先探测、后验证",
-      "apps": ["filmcraft", "photocraft", "effectcraft"],
-      "goal": "所有媒体操作的通用工作流纪律（来自专业剪辑技能的通用实践）",
+      "apps": ["filmcraft", "photocraft", "effectcraft", "lightcraft", "soundcraft"],
+      "skills": ["artcraft-ops"],
+      "goal": "所有媒体操作的通用工作流纪律",
       "principles": [
-        "先探测再动手：永远先 probe 素材拿真实时长/分辨率/帧率/音轨，不从文件名猜",
+        "先探测再动手：永远先 probe/info 素材拿真实时长/分辨率/帧率/音轨，不从文件名猜",
         "能无损不重编：剪切片段优先流复制，只在必须（精确剪切/滤镜/换格式）时重编码",
+        "先问能不能跑：describe <id> 看 enabled 与 disabled_reason，再决定动作顺序",
         "做完必验证：产物 probe 一次 + 关键帧目检，报告里写明验证结果",
         "诚实标注：成功是 Done、失败是 Failed，部分完成必须写出缺口"
       ],
       "steps": [
-        "任何处理前：filmcraft-cli probe <media>",
-        "处理后：filmcraft-cli probe <out> + 抽帧目检"
+        "任何处理前：filmcraft-cli probe <media>（或对应成员 info）",
+        "处理前：filmcraft-cli describe <命令 id> 核对 params 与前置条件",
+        "处理后：probe <out> + 抽帧目检"
       ],
       "checks": ["probe 输出与预期一致；差异写入报告而不是含糊带过"]
+    }
+  ],
+  "chains": [
+    {
+      "id": "short-drama-episode",
+      "title": "竖屏短剧单集成片（素材 → 交付）",
+      "skills": ["artcraft-ops", "artcraft-edit-rhythm", "artcraft-sound-design", "artcraft-delivery-qc"],
+      "when": "已有拍摄/生成素材，要出一集竖屏短剧",
+      "steps": [
+        { "app": "filmcraft", "cmd": "probe", "note": "逐条素材探真实参数（分辨率/帧率/VFR/音轨）" },
+        { "app": "filmcraft", "cmd": "file.newSequence", "params": { "width": 1080, "height": 1920, "fps": 30 } },
+        { "app": "filmcraft", "cmd": "timeline.place", "note": "按叙事顺序铺轨；用 timeline.move/razor/trim(mode=ripple) 调整" },
+        { "app": "filmcraft", "cmd": "transcript.generate", "note": "内置 whisper 转写" },
+        { "app": "filmcraft", "cmd": "transcript.removePauses", "note": "去停顿（自动粗剪）" },
+        { "app": "filmcraft", "cmd": "transcript.removeFillers", "note": "去口头禅" },
+        { "app": "filmcraft", "cmd": "transcript.createCaptions", "params": { "maxChars": 15, "lines": 2 } },
+        { "app": "filmcraft", "cmd": "captions.setStyle", "note": "统一字体/描边/安全区" },
+        { "app": "filmcraft", "cmd": "lumetri.applyMatch", "note": "以参考镜头做跨镜色彩匹配" },
+        { "app": "filmcraft", "cmd": "essentialSound.autoMatch", "params": { "target": -14 } },
+        { "app": "filmcraft", "cmd": "essentialSound.generateDucking", "note": "音乐避让对白" },
+        { "app": "filmcraft", "cmd": "file.exportMedia", "params": { "format": "h264", "width": 1080, "height": 1920 } },
+        { "app": "filmcraft", "cmd": "probe", "note": "复核产物规格" },
+        { "app": "filmcraft", "cmd": "scopes.read", "note": "示波器核对画面电平" }
+      ],
+      "verify": ["probe 规格一致", "示波器不越界", "响度达标", "字幕在安全区内", "抽帧目检通过"]
+    },
+    {
+      "id": "storyboard-from-script",
+      "title": "剧本 → 图文分镜（含调度图）",
+      "skills": ["artcraft-shot-language", "artcraft-edit-rhythm"],
+      "when": "有剧本/大纲，要出可执行分镜",
+      "steps": [
+        { "app": "figcraft", "cmd": "file.new", "note": "建画板：每场一页（page.add）" },
+        { "app": "figcraft", "cmd": "component.create", "note": "把『镜位框/人物块/箭头』做成组件，保证分镜风格统一" },
+        { "app": "figcraft", "cmd": "variable.createCollection", "note": "变量锁：景别/机位/光线标签统一取值" },
+        { "app": "figcraft", "cmd": "vector.create", "note": "画俯视调度图：站位、走位线、机位、灯位、轴线" },
+        { "app": "deckcraft", "cmd": "slide.delete", "note": "（可选）用 DeckCraft 出演示式分镜：slide 系列 + animation.timing" },
+        { "app": "designcraft", "cmd": "layout.pages.insert", "note": "（可选）排版成分镜册：book/article/type" },
+        { "app": "gridcraft", "cmd": "data.sort", "note": "分镜表：镜号/景别/角度/运动/时长/内容/声音/转场（data.* + pivot.* 汇总）" },
+        { "app": "figcraft", "cmd": "export", "note": "导出 png/pdf 分镜（--bleed/--crop-marks 供印刷）" }
+      ],
+      "verify": ["每镜有景别/角度/运动/时长", "轴线一致无跳轴", "调度图与分镜一一对应"]
+    },
+    {
+      "id": "raw-batch-develop",
+      "title": "RAW/照片批量冲洗与风格锁定",
+      "skills": ["artcraft-color-light", "artcraft-ops"],
+      "when": "一批照片/RAW 要统一影调并交付",
+      "steps": [
+        { "app": "lightcraft", "cmd": "run", "params": { "args": ["--import", "<目录>"] }, "note": "导入素材" },
+        { "app": "lightcraft", "cmd": "develop.controls", "note": "先列 122 个控制与分区，明确要动哪几项" },
+        { "app": "lightcraft", "cmd": "develop.auto", "note": "自动初调作为起点" },
+        { "app": "lightcraft", "cmd": "develop.set", "note": "按顺序微调：light.* → curve.* → color.* → grading.* → detail.* → optics.*" },
+        { "app": "lightcraft", "cmd": "mask.add", "note": "局部处理（人脸/天空）" },
+        { "app": "lightcraft", "cmd": "preset.create", "note": "把定稿参数固化为预设" },
+        { "app": "lightcraft", "cmd": "preset.apply", "note": "整批套用，保证一致性" },
+        { "app": "lightcraft", "cmd": "app.export", "note": "按目标尺寸/质量导出（可选 --opt colorSpace/bitDepth）" }
+      ],
+      "verify": ["抽样对比跨图一致", "肤色正常", "无过曝/死黑", "导出规格符合交付要求"]
+    },
+    {
+      "id": "film-study",
+      "title": "拉片/影片分析（结构·情绪·镜头）",
+      "skills": ["artcraft-edit-rhythm", "artcraft-shot-language", "artcraft-delivery-qc"],
+      "when": "要研究一部片子的结构、节奏与镜头语言（影评/学习）",
+      "steps": [
+        { "app": "filmcraft", "cmd": "probe", "note": "先拿全片真实参数（时长/帧率/音轨）" },
+        { "app": "filmcraft", "cmd": "transcript.generate", "note": "得到带时间轴的台词/对白" },
+        { "app": "filmcraft", "cmd": "transcript.inspect", "note": "按段落查转写，定位场次" },
+        { "app": "filmcraft", "cmd": "captions.export", "params": { "format": "srt" }, "note": "导出字幕作为文本底稿" },
+        { "app": "photocraft", "cmd": "batch", "note": "按 1 秒间隔抽帧（或用 filmcraft render 单帧）得到全片帧表" },
+        { "app": "gridcraft", "cmd": "data.sort", "note": "建拉片表：时间码/场次/镜头数/景别/情绪值/备注（pivot.* 汇总统计）" },
+        { "app": "gridcraft", "cmd": "insert.chart", "note": "画情绪曲线/节奏密度图" },
+        { "app": "deckcraft", "cmd": "slide.first", "note": "出分析报告：结构树 + 泳道时间轴 + 情绪曲线" },
+        { "app": "deckcraft", "cmd": "file.export", "note": "导出 PDF/PPTX 交付" }
+      ],
+      "verify": ["时间码与画面对齐", "情绪曲线有依据（标出转折点）", "结论可回溯到具体镜头"]
+    },
+    {
+      "id": "audio-post",
+      "title": "音频后期：清理 → 混音 → 母带",
+      "skills": ["artcraft-sound-design"],
+      "when": "对白有噪声、需要混音与响度交付",
+      "steps": [
+        { "app": "soundcraft", "cmd": "session.open", "note": "打开/新建工程（或 FilmCraft 用 mixer 系列）" },
+        { "app": "soundcraft", "cmd": "session.audio_health", "note": "先体检：丢失/异常片段" },
+        { "app": "soundcraft", "cmd": "mix.insert_param", "note": "插入降噪/EQ/压缩并设参" },
+        { "app": "soundcraft", "cmd": "automation.set_point", "note": "写音量/声像自动化（或 write_range 批量写）" },
+        { "app": "soundcraft", "cmd": "automation.thin", "note": "自动化点稀疏化" },
+        { "app": "soundcraft", "cmd": "event.beat_detective", "note": "音乐段落检测节拍（配合画面切点）" },
+        { "app": "soundcraft", "cmd": "file.bounce_stems", "params": { "format": "wav", "bit_depth": 24 }, "note": "分轨交付" },
+        { "app": "soundcraft", "cmd": "file.bounce_mix", "note": "母版导出" }
+      ],
+      "verify": ["audio_health 无异常", "对白清晰不被盖", "响度与真峰值达标"]
+    },
+    {
+      "id": "vfx-composite-shot",
+      "title": "合成镜头：跟踪 → 抠像 → 合成 → 渲染",
+      "skills": ["artcraft-motion-vfx", "artcraft-ops"],
+      "when": "需要在实拍上叠加元素/替换背景/做特效镜头",
+      "steps": [
+        { "app": "effectcraft", "cmd": "comp.new", "note": "建合成，尺寸对齐主序列" },
+        { "app": "effectcraft", "cmd": "track.motion", "note": "跟踪参考点；稳定用 track.stabilize（记得缩放补偿）" },
+        { "app": "effectcraft", "cmd": "roto.model.download", "note": "Roto Brush 模型（首次）" },
+        { "app": "effectcraft", "cmd": "roto.stroke", "note": "少量 strokes → roto.propagate 传播 → roto.freeze 修正段" },
+        { "app": "effectcraft", "cmd": "mask.featherPoint.add", "note": "遮罩羽化，避免硬边" },
+        { "app": "effectcraft", "cmd": "effect.apply", "note": "键控/合成/调色（Color Correction 40 个、Keying 12 个等）" },
+        { "app": "effectcraft", "cmd": "keys.easyEase", "note": "所有动画加缓动" },
+        { "app": "effectcraft", "cmd": "render-frame", "note": "先渲单帧复核" },
+        { "app": "effectcraft", "cmd": "render", "params": { "resolution": "half", "quality": "draft" }, "note": "低分辨率预演" },
+        { "app": "effectcraft", "cmd": "render", "note": "定稿全质量渲染（可 --queue）" }
+      ],
+      "verify": ["跟踪无滑移", "抠像无残留边", "合成与实拍光比/颗粒匹配", "成品抽帧复核"]
+    },
+    {
+      "id": "design-system-deliverable",
+      "title": "设计系统与 UI 交付（FigCraft）",
+      "skills": ["artcraft-shot-language", "artcraft-delivery-qc"],
+      "when": "要做界面/图文资产并保证跨集一致、可交付开发",
+      "steps": [
+        { "app": "figcraft", "cmd": "style.create", "note": "建样式（颜色/文字/效果），锁死设计令牌" },
+        { "app": "figcraft", "cmd": "variable.createCollection", "note": "变量集合 + 模式（主题/多语言/多尺寸）" },
+        { "app": "figcraft", "cmd": "component.create", "note": "把复用元素做成组件；变体用 combineVariants/addVariant" },
+        { "app": "figcraft", "cmd": "layout.setTrack", "note": "自动布局（add/suggest）" },
+        { "app": "figcraft", "cmd": "proto.interaction.add", "note": "原型交互与流程（flow.add）" },
+        { "app": "figcraft", "cmd": "measure.padding", "note": "标注与间距测量" },
+        { "app": "figcraft", "cmd": "inspect.readyForDev", "note": "交付前自检" },
+        { "app": "figcraft", "cmd": "codeConnect.set", "note": "绑定代码组件（Dev 交付）" },
+        { "app": "figcraft", "cmd": "export", "params": { "format": "pdf" }, "note": "导出交付（印刷加 --bleed/--cmyk）" }
+      ],
+      "verify": ["组件/变量/样式一致", "readyForDev 通过", "导出跨机渲染一致（--no-system-fonts）"]
+    },
+    {
+      "id": "document-delivery",
+      "title": "文档 / PDF 交付与无障碍质检",
+      "skills": ["artcraft-delivery-qc", "artcraft-ops"],
+      "when": "要交付 PDF/Word 文档，且需要无障碍、尺寸与安全合规",
+      "steps": [
+        { "app": "pdfcraft", "cmd": "info", "note": "先探文档：页数/尺寸/加密/表单/字体" },
+        { "app": "pdfcraft", "cmd": "ocr.enhance_camera", "note": "扫描件先提质（可选）" },
+        { "app": "pdfcraft", "cmd": "ocr.recognize", "note": "OCR 取文本层（批量用 ocr.recognize_batch）" },
+        { "app": "pdfcraft", "cmd": "edit.edit_text", "note": "勘误与页级整理（配合 page.combine / page.delete）" },
+        { "app": "pdfcraft", "cmd": "a11y.check", "note": "无障碍检查（阅读顺序/标签）" },
+        { "app": "pdfcraft", "cmd": "a11y.alt_text", "note": "补图片替代文本；a11y.reading_options 调阅读顺序" },
+        { "app": "pdfcraft", "cmd": "measure.distance", "note": "尺寸/边距测量（印刷或版式规范）" },
+        { "app": "pdfcraft", "cmd": "form.detect", "note": "表单域检测（需要填写时用 form.prepare / form.merge_data）" },
+        { "app": "pdfcraft", "cmd": "optimize.reduce", "note": "体积优化（交付前；需要更激进用 optimize.advanced）" },
+        { "app": "pdfcraft", "cmd": "protect.password", "note": "如需加密/权限（protect.remove 反向操作）" },
+        { "app": "wordcraft", "cmd": "file.accessibility", "note": "源为 DOCX 时先做 Word 侧无障碍" },
+        { "app": "wordcraft", "cmd": "review.changes", "note": "清点修订/批注，交付前确认无残留" },
+        { "app": "wordcraft", "cmd": "references.bibliography", "note": "文献与引用规范（学术交付）" }
+      ],
+      "verify": ["a11y.check 无致命项", "尺寸/边距符合印刷或平台要求", "修订与批注已处理", "加密与权限符合约定", "体积与页数符合交付限制"]
     }
   ]
 }

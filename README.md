@@ -14,15 +14,15 @@
 
 ## Why this exists
 
-[ArtCraft](https://getartcraft.com/apps) is a family of **twelve** free, fair-source reinventions
+[ArtCraft](https://getartcraft.com/apps) is a family of **thirteen** free, fair-source reinventions
 of Adobe's studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop),
 **VectorCraft** (Illustrator), **FilmCraft** (Premiere Pro), **LightCraft** (Lightroom),
 **PdfCraft** (Acrobat), **EffectCraft** (After Effects), **DesignCraft** (InDesign),
-**WordCraft** (Word), **DeckCraft** (PowerPoint), **GridCraft** (Excel), **CADCraft** (AutoCAD)
-and **SoundCraft** (Pro Tools). They share one superpower that most desktop apps don't have:
-**every menu item, slider and dialog is a command**, and the exact same commands can be driven
-from a headless CLI, a JSON control channel, or an MCP server. The apps were built for agents
-from day one.
+**WordCraft** (Word), **DeckCraft** (PowerPoint), **GridCraft** (Excel), **CADCraft** (AutoCAD),
+**SoundCraft** (Pro Tools) and **FigCraft** (Figma). They share one superpower that most desktop
+apps don't have: **every menu item, slider and dialog is a command**, and the exact same commands
+can be driven from a headless CLI, a JSON control channel, or an MCP server. The apps were built
+for agents from day one.
 
 This plugin brings that surface into DeepSeek Harness, so an AI agent can *operate* the apps —
 not just talk about them:
@@ -30,9 +30,17 @@ not just talk about them:
 - **In chat** — eight agent tools let any Harness session check the toolchain, run CLI commands,
   send control-channel commands to a running app, do bridged file operations, and consult a
   per-app capability catalog.
+- **A bundled craft skill pack** — seven skills (`artcraft-ops`, `artcraft-shot-language`,
+  `artcraft-edit-rhythm`, `artcraft-color-light`, `artcraft-sound-design`, `artcraft-motion-vfx`,
+  `artcraft-delivery-qc`) teach the agent *how* to drive the suite fluently, which effect to reach
+  for, and how to design shot language, pacing, grade, sound and delivery. They ship inside the
+  plugin and load on demand.
 - **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
   no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
   a node-based AI short-drama storyboard canvas, but any front end can use it.
+- **Paths belong to the caller** — this plugin is a bridge and owns no data directory. Files read
+  or written go wherever the caller points: chat invocations default to the current conversation
+  workspace (or any path named in the prompt); the canvas writes under its own project folder.
 - **Paths belong to the caller** — this plugin is a bridge and owns no data directory. Files read
   or written go wherever the caller points: chat invocations default to the current conversation
   workspace (or any path named in the prompt); the canvas writes under its own project folder.
@@ -150,7 +158,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
 | `artcraft_discover` | Family install auto-discovery: fills missing paths, auto-corrects stale ones |
 | `artcraft_apps` | Capability catalog for all 12 apps: CLI subcommands, control ports, MCP, repo/docs links |
-| `artcraft_recipes` | Built-in expert recipes: 8 cross-app professional workflows |
+| `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 8 task→skill→command chains** (vertical short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system) |
 | `artcraft_update` | The plugin's own update (check / apply) |
 
 ## Driving it from the browser
@@ -283,7 +291,7 @@ a web UI.
 
 The HTTP surface has **no authentication** and rides on the Harness web server, which listens on
 loopback only — treat the port as trusted-local and don't expose it to a network; put a reverse
-proxy with auth in front if you must. Child processes are locked to the twelve allow-listed
+proxy with auth in front if you must. Child processes are locked to the thirteen allow-listed
 family CLIs; the control channel only ever dials `127.0.0.1`.
 
 ## Publishing

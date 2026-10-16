@@ -288,6 +288,58 @@
         { "name": "plugins", "usage": "plugins", "summary": "内置插件清单" },
         { "name": "mcp", "usage": "mcp [--connect PORT] [--demo]", "summary": "stdio MCP" }
       ]
+    },
+    {
+      "id": "figcraft",
+      "name": "FigCraft",
+      "tagline": "界面设计与原型",
+      "ref": "Figma",
+      "stage": "in development",
+      "repo": "https://github.com/storytold/figcraft",
+      "docs": "https://getartcraft.com/apps/figcraft",
+      "cli": "figcraft-cli",
+      "control": null,
+      "controlNote": "控制通道端口动态（mcp --attach PORT 桥接运行中的 app）",
+      "mcp": true,
+      "global": ["--no-system-fonts（或 FIGCRAFT_NO_SYSTEM_FONTS=1，只用内置字体，保证跨机渲染一致）"],
+      "subcommands": [
+        { "name": "info", "usage": "info <file> [--json]", "summary": "文件摘要（.figcraft / .json / .fig 尽力导入并列出未导入项 / SVG / 位图）" },
+        { "name": "export", "usage": "export <file> -o <out> [--format png|jpg|svg|webp|pdf|fig] [--scale N] [--page NAME] [--node ID|NAME] [--bleed LENGTH] [--crop-marks] [--bleed-marks] [--cmyk]", "summary": "导出：每个顶层 frame 一个文件，或用图像扩展名/--node 出单个；PDF 支持出血与印刷标记" },
+        { "name": "convert", "usage": "convert <in> <out>", "summary": "格式转换" },
+        { "name": "render", "usage": "render <file> -o <out.png> [--scale N] [--page NAME]", "summary": "渲染页面为 PNG" },
+        { "name": "run", "usage": "run <script.json|script.jsonl> [--in <file>] [--out <file>]", "summary": "无头执行命令脚本（每步一行 JSON 结果）" },
+        { "name": "commands", "usage": "commands [--json] [--filter TEXT]", "summary": "命令清单（552 条，含 params / shortcut / undoable）" },
+        { "name": "mcp", "usage": "mcp [--attach PORT]", "summary": "stdio MCP 服务器" },
+        { "name": "plugin publish", "usage": "plugin publish <folder> --server ws://host:port/[?key=KEY]", "summary": "向 figcraft-server 发布插件（密钥可走 FIGCRAFT_SERVER_KEY 环境变量）" },
+        { "name": "perf", "usage": "perf [--layers N[,N...]] [--instances N[,N...]]", "summary": "性能基准（图层/实例规模）" }
+      ],
+      "commandFamilies": [
+        { "name": "component", "count": 21, "note": "组件系统：create / createMultiple / combineVariants / addVariant / exposeInstance / makeSlot / detach / resetInstance / resetOverride / goToMain" },
+        { "name": "instance", "count": 8, "note": "实例：create / place / exposed / slotInsert / resetSlot / swap / swapAt / setProperties" },
+        { "name": "variable", "count": 18, "note": "变量：createCollection / addMode / setMode / renameMode / create / set / bind / update —— 主题、多语言、多尺寸差异" },
+        { "name": "style", "count": 10, "note": "样式：create / apply / bind / update / detach / duplicate / move / renameFolder（设计系统锁）" },
+        { "name": "proto", "count": 20, "note": "原型：interaction.add/set/clear/remove + flow.add/rename/remove + settings + present/preview/presentOptions" },
+        { "name": "codeConnect + devResource + inspect", "count": 13, "note": "Dev 交付：codeConnect.set/export/import、devResource.add/edit/list、inspect.code/readyForDev/componentCode" },
+        { "name": "annotation + measure + grid + layout", "count": 19, "note": "标注与版式：annotation.*（含分类）、measure.distances/padding、grid.add/remove/move、layout.add/remove/suggest/setTrack" }
+      ]
     }
-  ]
+  ],
+  "capabilityStats": {
+    "note": "2026-10 实测：本机 13 个成员 CLI 的命令注册表规模与主要命令族。JSON 注册表入口（filmcraft / effectcraft / photocraft / gridcraft / wordcraft / figcraft 用 commands --json）为精确条目数，其余为 id 扫描值（近似）。用 artcraft_cli 跑 commands 可随时复核。",
+    "apps": {
+      "photocraft": { "commands": 364, "topFamilies": ["filter 62（gallery 47 / blur 11 / stylize 9 / distort 9 / render 9）", "edit 31", "layer 26", "select 19", "file.automate 18", "channel 18", "actions 14", "image.adjustments 9"] },
+      "vectorcraft": { "commands": 385, "topFamilies": ["object 71", "perspective 24", "select 18", "file 17", "swatch 15", "document 12", "layer 11", "path 11", "symbol 10", "dataset 10"] },
+      "filmcraft": { "commands": 701, "topFamilies": ["graphics 82", "clip 57", "file 57", "timeline 56", "sequence 45", "project 40", "edit 39", "multicam 35", "markers 32", "trim 24", "captions 22", "mixer 20", "export 19", "effects 16", "transcript 14", "masks 12", "essentialSound 9", "lumetri 7", "tts 7", "lut 4"] },
+      "lightcraft": { "commands": 192, "developControls": 122, "topFamilies": ["library 20", "faces 17", "denoise 16", "develop 16（122 个控制 / 14 分区）", "photo 14", "mask 12", "keyword 12", "preset 9", "crop 6", "stack 6"] },
+      "pdfcraft": { "commands": 71, "topFamilies": ["edit 13", "page 10", "measure 7", "a11y 5", "export 4", "ocr 3", "form 3", "comment 3", "protect 2", "sign 2"] },
+      "effectcraft": { "commands": 731, "effects": 307, "topFamilies": ["layer 121", "view 78", "file 61", "keys 36", "comp 31", "edit 27", "track 22", "essential 22", "renderQueue 20", "effect 19", "camera 19", "prop 18", "mask 17", "time 17", "roto 14", "text 13", "puppet 10"], "exportFormats": ["H264", "Hevc", "Av1", "ProRes", "Uncompressed", "WebM", "PngSequence", "JpegSequence", "TiffSequence", "ExrSequence", "Gif", "Wav", "Aiff"], "expressions": true, "scripting": true },
+      "designcraft": { "commands": 279, "topFamilies": ["object 22", "style 17", "file 15", "transform 10", "data 10", "type 10", "library 8", "layout 7", "book 7", "edit 7", "text 7", "layer 7", "table 7", "article 6"] },
+      "wordcraft": { "commands": 299, "topFamilies": ["para 28", "format 25", "file 18", "review 16", "equation 15", "insert 15", "table 14", "view 13", "select 12", "picture 11", "styles 11", "references 10", "mailings 9"] },
+      "deckcraft": { "commands": 165, "topFamilies": ["format 32", "shape 19", "slide 15", "file 13", "animation 10", "text 10", "edit 9", "media 7", "insert 7", "arrange 7", "design 5", "transition 4"] },
+      "gridcraft": { "commands": 115, "topFamilies": ["home 12", "pivot 11", "insert 10", "data 10", "view 9", "sheet 8", "edit 7", "file 7", "selection 6", "formulas 5", "chart 3", "slicer 3"] },
+      "cadcraft": { "commands": 139, "topFamilies": ["table 11", "arc 10", "zoom 9", "dimstyle 7", "blocks 6", "grip 6", "layout 6", "layerstate 5", "vports 5", "circle 5", "dimtedit 5"] },
+      "soundcraft": { "commands": 478, "topFamilies": ["view 96", "edit 93", "track 65", "event 35", "options 35", "clip 31", "mix 29", "setup 20", "file 17", "transport 13", "session 11（含 audio_health）", "automation 10"] },
+      "figcraft": { "commands": 552, "topFamilies": ["text 52", "view 48", "vector 40", "object 27", "tool 21", "select 21", "component 21", "collab 20", "file 20", "proto 20", "library 18", "variable 18", "edit 15", "comment 14", "plugin 11", "style 10"] }
+    }
+  }
 }

@@ -2,3 +2,7 @@
     - id: artcraft
       name: '@ninkch/dsh-artcraft'
       config: {}
+    # 技能提供者单独一行：只依赖 skills 服务，缺失时不影响上面的工具与 HTTP API
+    - id: artcraft-skills
+      name: '@ninkch/dsh-artcraft/skills'
+      config: {}

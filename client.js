@@ -15,7 +15,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'artcraft';
     const API = '/artcraft/api';
-    const LABELS = { photocraft: 'PhotoCraft', vectorcraft: 'VectorCraft', filmcraft: 'FilmCraft', lightcraft: 'LightCraft', pdfcraft: 'PdfCraft', effectcraft: 'EffectCraft', designcraft: 'DesignCraft', wordcraft: 'WordCraft', deckcraft: 'DeckCraft', gridcraft: 'GridCraft', cadcraft: 'CADCraft', soundcraft: 'SoundCraft' };
+    const LABELS = { photocraft: 'PhotoCraft', vectorcraft: 'VectorCraft', filmcraft: 'FilmCraft', lightcraft: 'LightCraft', pdfcraft: 'PdfCraft', effectcraft: 'EffectCraft', designcraft: 'DesignCraft', wordcraft: 'WordCraft', deckcraft: 'DeckCraft', gridcraft: 'GridCraft', cadcraft: 'CADCraft', soundcraft: 'SoundCraft', figcraft: 'FigCraft' };
 
     const CSS = `
 .dshac-card { border: 1px solid var(--dsw-border-primary, rgba(128,128,128,.35)); border-radius: 10px; padding: 12px; font-size: 13px; line-height: 1.5; }

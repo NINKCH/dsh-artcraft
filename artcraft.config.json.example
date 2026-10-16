@@ -11,10 +11,13 @@
     "deckcraft": "C:/Program Files/DeckCraft",
     "gridcraft": "C:/Program Files/GridCraft",
     "cadcraft": "C:/Program Files/CADCraft",
-    "soundcraft": "C:/Program Files/SoundCraft"
+    "soundcraft": "C:/Program Files/SoundCraft",
+    "figcraft": "C:/Program Files/FigCraft"
   },
   "control": {
     "filmcraft": 9876,
-    "effectcraft": 9877
+    "effectcraft": 9877,
+    "vectorcraft": 7979,
+    "lightcraft": 7980
   }
 }

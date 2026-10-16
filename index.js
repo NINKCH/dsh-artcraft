@@ -8,12 +8,16 @@
  *
  * 两种形态：
  *   1) Agent Tools（对话内直接驱动）:
- *        artcraft_status  —— 检查 12 个家族 CLI 是否可用、配置目录、控制通道配置
- *        artcraft_cli     —— 运行 12 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
+ *        artcraft_status  —— 检查 13 个家族 CLI 是否可用、配置目录、控制通道配置
+ *        artcraft_cli     —— 运行 13 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
  *        artcraft_control —— 向运行中的 FilmCraft/EffectCraft/VectorCraft/LightCraft JSON 控制通道发一条命令
  *        artcraft_fs      —— 桥接文件操作（list/stat/readtext/write/mkdir，绝对路径）
  *        artcraft_update  —— 插件自身更新（检查/应用）
- *        artcraft_apps    —— 12 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
+ *        artcraft_apps    —— 13 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
+ *
+ * 技能包（独立插件行 @ninkch/dsh-artcraft/skills，见 skills.js）：artcraft-ops / artcraft-shot-language /
+ * artcraft-edit-rhythm / artcraft-color-light / artcraft-sound-design / artcraft-motion-vfx /
+ * artcraft-delivery-qc —— 教 agent 怎么调得顺、何时用哪种效果、镜头语言怎么设计。
  *   2) HTTP API（同源 /artcraft/api/*，供无限画布等前端调用，无 CORS 问题）:
  *        GET  /artcraft/api/status     环境自检
  *        GET  /artcraft/api/fs         list / stat / readtext
@@ -26,7 +30,7 @@
  *        GET  /artcraft/api/apps       家族能力目录（list / ?id= 单个）
  *
  * 安全约定：
- *   - 子进程只允许 12 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
+ *   - 子进程只允许 13 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
  *   - 控制通道只连 127.0.0.1，与 ArtCraft 官方协议一致（App 需以 --control 启动；
  *     已知默认端口：filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980；
  *     PhotoCraft 控制通道为令牌鉴权模式、PdfCraft 为文件式（--control FILE），均不代理；
@@ -46,12 +50,12 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.10';
+const VERSION = '0.2.11';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = [
   'photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft',
-  'designcraft', 'wordcraft', 'deckcraft', 'gridcraft', 'cadcraft', 'soundcraft',
+  'designcraft', 'wordcraft', 'deckcraft', 'gridcraft', 'cadcraft', 'soundcraft', 'figcraft',
 ];
 const PKG_NAME = '@ninkch/dsh-artcraft';
 const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877, vectorcraft: 7979, lightcraft: 7980 };
@@ -78,6 +82,7 @@ const DEFAULT_CONFIG = {
     gridcraft: 'gridcraft-cli',
     cadcraft: 'cadcraft-cli',
     soundcraft: 'soundcraft-cli',
+    figcraft: 'figcraft-cli',
   },
   control: { ...DEFAULT_PORTS },
 };
@@ -86,7 +91,7 @@ const APP_DISPLAY = {
   photocraft: 'PhotoCraft', vectorcraft: 'VectorCraft', filmcraft: 'FilmCraft',
   lightcraft: 'LightCraft', pdfcraft: 'PdfCraft', effectcraft: 'EffectCraft',
   designcraft: 'DesignCraft', wordcraft: 'WordCraft', deckcraft: 'DeckCraft',
-  gridcraft: 'GridCraft', cadcraft: 'CADCraft', soundcraft: 'SoundCraft',
+  gridcraft: 'GridCraft', cadcraft: 'CADCraft', soundcraft: 'SoundCraft', figcraft: 'FigCraft',
 };
 
 /* ============================ 配置 ============================ */
@@ -757,7 +762,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_status',
-      description: '检查 ArtCraft 家族 12 个 CLI 是否可用，报告配置目录、控制通道端口与任务状态。本插件只是桥接，产物路径由调用方决定。',
+      description: '检查 ArtCraft 家族 13 个 CLI 是否可用，报告配置目录、控制通道端口与任务状态。本插件只是桥接，产物路径由调用方决定。',
       schema: { type: 'object', properties: {}, additionalProperties: false },
       async execute() {
         const cfg = await loadConfig();
@@ -767,7 +772,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_cli',
-      description: '运行 ArtCraft 家族 CLI 的任意子命令（photocraft-cli / wordcraft-cli / soundcraft-cli 等 12 个，bin 参数的 enum 即完整清单）。长渲染请改用 HTTP POST /artcraft/api/job 后台执行。',
+      description: '运行 ArtCraft 家族 CLI 的任意子命令（photocraft-cli / wordcraft-cli / figcraft-cli 等 13 个，bin 参数的 enum 即完整清单）。长渲染请改用 HTTP POST /artcraft/api/job 后台执行。',
       schema: {
         type: 'object',
         properties: {
@@ -919,12 +924,12 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_recipes',
-      description: '内置专家处理方案库：ArtCraft 家族的专业工作流配方（短剧海报、分镜批量调色、横转竖、响度标准化、SRT 字幕烧录、动态片头、多平台分发包、先探测后验证纪律）。action=list 列出全部；action=get + id 取单个配方的专业原则、执行步骤与验证清单。',
+      description: '内置专家处理方案库（v2）：8 套专业配方（短剧海报、分镜批量调色、横转竖、响度标准化、字幕生成与烧录、动态片头、多平台分发包、先探测后验证纪律）+ 8 条「任务 → 技能 → 命令链」编排模板（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付）。action=list 列配方；action=get + id 取配方详情；action=chains 列编排链；action=chain + id 取完整命令链。配方中的 skills 字段指名应先读的技能包。',
       schema: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['list', 'get'] },
-          id: { type: 'string', description: 'action=get 时的配方 id' },
+          action: { type: 'string', enum: ['list', 'get', 'chains', 'chain'] },
+          id: { type: 'string', description: 'action=get / chain 时的 id' },
         },
         required: ['action'],
         additionalProperties: false,
@@ -932,22 +937,37 @@ export function apply(ctx) {
       async execute(args) {
         const recipesPath = path.join(HERE, 'recipes', 'recipes.json');
         const catalog = JSON.parse(await fs.readFile(recipesPath, 'utf8'));
-        if (String(args.action) === 'get') {
+        const action = String(args.action);
+        const chains = Array.isArray(catalog.chains) ? catalog.chains : [];
+        if (action === 'get') {
           const r = catalog.recipes.find((x) => x.id === String(args.id ?? ''));
           if (!r) throw new Error('配方不存在: ' + args.id + '（可用: ' + catalog.recipes.map((x) => x.id).join(', ') + '）');
           return r;
         }
+        if (action === 'chain') {
+          const c = chains.find((x) => x.id === String(args.id ?? ''));
+          if (!c) throw new Error('编排链不存在: ' + args.id + '（可用: ' + chains.map((x) => x.id).join(', ') + '）');
+          return c;
+        }
+        if (action === 'chains') {
+          return {
+            version: catalog.version,
+            chains: chains.map((c) => ({ id: c.id, title: c.title, skills: c.skills, when: c.when, steps: c.steps?.length ?? 0 })),
+            hint: 'action=chain + id 取完整命令链（每步 app + cmd + 说明 + 验证项）',
+          };
+        }
         return {
           version: catalog.version,
-          recipes: catalog.recipes.map((r) => ({ id: r.id, title: r.title, apps: r.apps, goal: r.goal })),
-          hint: 'action=get + id 取完整配方（专业原则 + 执行步骤 + 验证清单）',
+          recipes: catalog.recipes.map((r) => ({ id: r.id, title: r.title, apps: r.apps, skills: r.skills, goal: r.goal })),
+          chains: chains.map((c) => ({ id: c.id, title: c.title, skills: c.skills })),
+          hint: 'action=get + id 取配方（原则 + 步骤 + 验证）；action=chain + id 取编排链；技能包见 artcraft-ops 等 7 个技能',
         };
       },
     });
 
     attempt({
       name: 'artcraft_apps',
-      description: 'ArtCraft 家族 12 应用的自动化能力目录：每个应用的定位、对标软件、CLI 子命令用法、控制通道端口、MCP 可用性与仓库/文档链接。action=list 列出全部；action=get + id 取单个应用的完整能力卡。要拿某应用的实时命令注册表，用 artcraft_cli 跑该应用的 commands 子命令。',
+      description: 'ArtCraft 家族 13 应用的自动化能力目录：每个应用的定位、对标软件、CLI 子命令用法、控制通道端口、MCP 可用性与仓库/文档链接，另含各成员实测命令族统计。action=list 列出全部；action=get + id 取单个应用的完整能力卡。要拿某应用的实时命令注册表，用 artcraft_cli 跑该应用的 commands 子命令。',
       schema: {
         type: 'object',
         properties: {
