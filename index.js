@@ -55,7 +55,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.2.11';
+const VERSION = '0.3.0';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = [
