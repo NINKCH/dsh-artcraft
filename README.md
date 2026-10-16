@@ -158,7 +158,9 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_control` | One command over the JSON control channel of a *running* app (filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980, or pass `port`) |
 | `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
 | `artcraft_discover` | Family install auto-discovery: fills missing paths, auto-corrects stale ones |
-| `artcraft_apps` | Capability catalog for all 12 apps: CLI subcommands, control ports, MCP, repo/docs links |
+| `artcraft_apps` | Capability catalog for all 13 apps: CLI subcommands, control ports, MCP, repo/docs links, plus measured command-family stats |
+| `artcraft_qc` | Delivery QC: family probe + platform-spec checks returning ok/warn/fail/manual with fix commands (video/audio/image/pdf/doc/sheet/deck/fig/cad) |
+| `artcraft_live` | Control-channel liveness: which apps are running right now (ready for live tuning) |
 | `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 11 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles) |
 | `artcraft_update` | The plugin's own update (check / apply) |
 
@@ -196,6 +198,7 @@ Full route list:
 | `GET /artcraft/api/apps[?id=…]` | Family capability catalog (13 apps + command-family stats) |
 | `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | Delivery QC: platform-spec checks with fix commands |
 | `GET /artcraft/api/skills` | Bundled skill pack listing (9 skills + their reference files) |
+| `GET /artcraft/api/live[?ports=app:port,…]` | Control-channel liveness (which apps are running) |
 | `POST /artcraft/api/discover` | Family install discovery + config self-repair |
 | `GET /artcraft/api/update/check` · `POST /artcraft/api/update/apply` | The plugin's own update |
 

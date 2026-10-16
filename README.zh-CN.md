@@ -141,7 +141,9 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_control` | 向**运行中**的 App 控制通道发一条命令（filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980，或 port 直连） |
 | `artcraft_fs` | 桥接文件操作 —— list / stat / 读 / 写 / 建目录，路径由调用方绝对指定 |
 | `artcraft_discover` | 家族安装自动探测：填充缺失路径、自动纠正失效路径 |
-| `artcraft_apps` | 12 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 |
+| `artcraft_apps` | 13 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 + 实测命令族统计 |
+| `artcraft_qc` | 交付质检：家族探针 + 平台规格核对，返回 ok/warn/fail/manual 与修复命令（video/audio/image/pdf/doc/sheet/deck/fig/cad） |
+| `artcraft_live` | 控制通道活性探测：哪些 App 正开着（可直接"边看边调"） |
 | `artcraft_recipes` | 内置专家配方（8 套）**与 11 条「任务→技能→命令链」编排**（短剧成片、剧本到分镜、RAW 冲洗、拉片分析、音频后期、合成镜头、设计系统、文档交付、批量横转竖、封面包装、多语言字幕） |
 | `artcraft_update` | 插件自身更新（检查 / 应用） |
 
@@ -178,6 +180,7 @@ POST /artcraft/api/job/cancel  { "id":"7f2c…" }
 | `GET /artcraft/api/apps[?id=…]` | 家族能力目录（13 应用 + 命令族统计） |
 | `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | 交付质检：平台规格核对 + 修复建议 |
 | `GET /artcraft/api/skills` | 内置技能包清单（9 技能 + 各自参考文件） |
+| `GET /artcraft/api/live[?ports=app:port,…]` | 控制通道活性（哪些 App 正开着） |
 | `POST /artcraft/api/discover` | 家族安装探测 + 配置自动修复 |
 | `GET /artcraft/api/update/check` · `POST /artcraft/api/update/apply` | 插件自更新 |
 

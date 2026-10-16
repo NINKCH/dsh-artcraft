@@ -15,6 +15,7 @@
  *        artcraft_update  —— 插件自身更新（检查/应用）
  *        artcraft_apps    —— 13 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
  *        artcraft_qc      —— 交付质检（家族探针 + 平台规格核对，返回 PASS/WARN/FAIL/MANUAL）
+ *        artcraft_live    —— 控制通道活性探测（哪些 App 正开着，可直接边看边调）
  *
  * 技能包（独立插件行 @ninkch/dsh-artcraft/skills，见 skills.js）：artcraft-ops / artcraft-shot-language /
  * artcraft-edit-rhythm / artcraft-color-light / artcraft-sound-design / artcraft-motion-vfx /
@@ -31,6 +32,7 @@
  *        GET  /artcraft/api/apps       家族能力目录（list / ?id= 单个，含命令族统计）
  *        GET  /artcraft/api/qc         交付质检（?path= 产物[&platform=][&kind=]）
  *        GET  /artcraft/api/skills     内置技能包清单
+ *        GET  /artcraft/api/live       控制通道活性（?ports=app:port,… 追加）
  *
  * 安全约定：
  *   - 子进程只允许 13 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
@@ -678,6 +680,42 @@ async function runQc(cfg, { path: rawPath, platform, kind: wantKind } = {}) {
   };
 }
 
+/* ============================ 控制通道活性探测 ============================ */
+
+/**
+ * 探测哪些家族 App 正在运行（控制通道可达 = 该 App 以 --control 启动且工程已打开）。
+ * 活性证据用一次 engine.commands 调用，顺带拿到该应用当前可用命令数（parity 视角的"活着"）。
+ */
+async function probeLiveApps(cfg, extraPorts = []) {
+  const targets = [];
+  for (const [app, port] of Object.entries(cfg.control || {})) targets.push({ app, port: Number(port) });
+  for (const ap of extraPorts) {
+    const p = Number(ap?.port ?? ap);
+    if (Number.isInteger(p) && p > 0 && p < 65536) targets.push({ app: ap?.app ?? null, port: p });
+  }
+  const seen = new Set();
+  const apps = [];
+  for (const t of targets) {
+    if (seen.has(t.port)) continue;
+    seen.add(t.port);
+    const started = Date.now();
+    try {
+      const result = await controlCall(t.port, 'engine.commands', {}, { timeoutMs: 2500 });
+      const list = Array.isArray(result) ? result : (result?.commands ?? result?.result ?? null);
+      apps.push({
+        app: t.app,
+        port: t.port,
+        live: true,
+        ms: Date.now() - started,
+        commands: Array.isArray(list) ? list.length : null,
+      });
+    } catch (e) {
+      apps.push({ app: t.app, port: t.port, live: false, ms: Date.now() - started, error: String(e?.message ?? e).slice(0, 160) });
+    }
+  }
+  return { live: apps.filter((a) => a.live).length, total: apps.length, apps, note: apps.some((a) => a.live) ? '控制通道可达：可直接用 artcraft_control 边看边调' : '未发现运行中的控制通道（App 需以 --control 启动）' };
+}
+
 /* ============================ 技能包清单 ============================ */
 
 /** 扫描包内技能目录（供 /api/skills 与界面展示；技能实际加载由 skills.js 的提供者负责） */
@@ -1228,6 +1266,22 @@ export function apply(ctx) {
       },
     });
 
+    attempt({
+      name: 'artcraft_live',
+      description: '探测哪些 ArtCraft App 正在运行（控制通道活性）：对已知端口逐个调用 engine.commands 作为活性证据，返回 live 列表、耗时与当前可用命令数。用于"边看边调"前的准备——确认目标 App 已以 --control 启动。可用 ports 追加自定义端口（如 [{app:"designcraft",port:8000}]）。',
+      schema: {
+        type: 'object',
+        properties: {
+          ports: { type: 'array', items: { type: 'object' }, description: '可选：追加探测的端口，元素形如 {app:"x", port:8000} 或直接端口号' },
+        },
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const cfg = await loadConfig();
+        return probeLiveApps(cfg, Array.isArray(args?.ports) ? args.ports : []);
+      },
+    });
+
     return () => {
       for (const d of disposers) { try { d(); } catch { /* ignore */ } }
     };
@@ -1421,6 +1475,16 @@ export function apply(ctx) {
           apps: catalog.apps.map((a) => ({ id: a.id, name: a.name, tagline: a.tagline, ref: a.ref, cli: a.cli, control: a.control, mcp: a.mcp, stage: a.stage })),
           capabilityStats: catalog.capabilityStats ?? null,
         });
+      }),
+
+      makeRoute(`/${NAME}/api/live`, async (req, res) => {
+        if (req.method !== 'GET') throw new Error('仅支持 GET');
+        const cfg = await loadConfig();
+        const url = new URL(req.url, 'http://x');
+        const extra = String(url.searchParams.get('ports') ?? '')
+          .split(',').map((s) => s.trim()).filter(Boolean)
+          .map((s) => { const [app, port] = s.split(':'); return port ? { app, port } : { port: app }; });
+        sendJson(res, 200, await probeLiveApps(cfg, extra));
       }),
 
       makeRoute(`/${NAME}/api/skills`, async (req, res) => {
