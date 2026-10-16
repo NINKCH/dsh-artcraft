@@ -14,6 +14,7 @@
  *        artcraft_fs      —— 桥接文件操作（list/stat/readtext/write/mkdir，绝对路径）
  *        artcraft_update  —— 插件自身更新（检查/应用）
  *        artcraft_apps    —— 13 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
+ *        artcraft_qc      —— 交付质检（家族探针 + 平台规格核对，返回 PASS/WARN/FAIL/MANUAL）
  *
  * 技能包（独立插件行 @ninkch/dsh-artcraft/skills，见 skills.js）：artcraft-ops / artcraft-shot-language /
  * artcraft-edit-rhythm / artcraft-color-light / artcraft-sound-design / artcraft-motion-vfx /
@@ -27,7 +28,9 @@
  *        POST /artcraft/api/job        启动长任务（渲染/导出/批处理）
  *        POST /artcraft/api/job/cancel 取消任务
  *        POST /artcraft/api/control    控制通道同步调用（engine.execute / ui.*）
- *        GET  /artcraft/api/apps       家族能力目录（list / ?id= 单个）
+ *        GET  /artcraft/api/apps       家族能力目录（list / ?id= 单个，含命令族统计）
+ *        GET  /artcraft/api/qc         交付质检（?path= 产物[&platform=][&kind=]）
+ *        GET  /artcraft/api/skills     内置技能包清单
  *
  * 安全约定：
  *   - 子进程只允许 13 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
@@ -673,6 +676,37 @@ async function runQc(cfg, { path: rawPath, platform, kind: wantKind } = {}) {
     probe,
     rawTail: raw ? raw.slice(-1200) : null,
   };
+}
+
+/* ============================ 技能包清单 ============================ */
+
+/** 扫描包内技能目录（供 /api/skills 与界面展示；技能实际加载由 skills.js 的提供者负责） */
+async function listBundledSkills() {
+  const dir = path.join(HERE, 'skills');
+  const out = [];
+  let entries = [];
+  try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return { skills: [] }; }
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const file = path.join(dir, ent.name, 'SKILL.md');
+    try {
+      const raw = await fs.readFile(file, 'utf8');
+      const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(raw);
+      const meta = {};
+      if (fm) for (const line of fm[1].split(/\r?\n/)) {
+        const kv = /^([A-Za-z_][\w-]*)\s*:\s*(.+)$/.exec(line);
+        if (kv) meta[kv[1]] = kv[2].trim();
+      }
+      const refs = [];
+      try {
+        for (const r of await fs.readdir(path.join(dir, ent.name, 'references'), { withFileTypes: true })) {
+          if (r.isFile()) refs.push(r.name);
+        }
+      } catch { /* 无 references 目录 */ }
+      out.push({ dir: ent.name, name: meta.name ?? ent.name, description: meta.description ?? '', references: refs, bytes: raw.length });
+    } catch { /* 跳过不可读 */ }
+  }
+  return { count: out.length, skills: out.sort((a, b) => a.dir.localeCompare(b.dir)) };
 }
 
 /* ============================ HTTP 基础设施 ============================ */
@@ -1385,7 +1419,13 @@ export function apply(ctx) {
           version: catalog.version,
           controlProtocol: catalog.controlProtocol,
           apps: catalog.apps.map((a) => ({ id: a.id, name: a.name, tagline: a.tagline, ref: a.ref, cli: a.cli, control: a.control, mcp: a.mcp, stage: a.stage })),
+          capabilityStats: catalog.capabilityStats ?? null,
         });
+      }),
+
+      makeRoute(`/${NAME}/api/skills`, async (req, res) => {
+        if (req.method !== 'GET') throw new Error('仅支持 GET');
+        sendJson(res, 200, await listBundledSkills());
       }),
 
       makeRoute(`/${NAME}/api/qc`, async (req, res) => {

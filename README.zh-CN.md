@@ -175,7 +175,9 @@ POST /artcraft/api/job/cancel  { "id":"7f2c…" }
 | `GET /artcraft/api/file?path=…` | 下载文件 —— 流式，上限 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | 任务生命周期，含产物探测与日志尾部 |
 | `POST /artcraft/api/control` | 控制通道同步调用（`app` 或 `port`） |
-| `GET /artcraft/api/apps[?id=…]` | 家族能力目录（12 应用） |
+| `GET /artcraft/api/apps[?id=…]` | 家族能力目录（13 应用 + 命令族统计） |
+| `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | 交付质检：平台规格核对 + 修复建议 |
+| `GET /artcraft/api/skills` | 内置技能包清单（9 技能 + 各自参考文件） |
 | `POST /artcraft/api/discover` | 家族安装探测 + 配置自动修复 |
 | `GET /artcraft/api/update/check` · `POST /artcraft/api/update/apply` | 插件自更新 |
 

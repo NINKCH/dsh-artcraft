@@ -193,7 +193,9 @@ Full route list:
 | `GET /artcraft/api/file?path=…` | Download a file — streamed, up to 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | Job lifecycle with output statting and tail logs |
 | `POST /artcraft/api/control` | Synchronous control-channel call (`app` or `port`) |
-| `GET /artcraft/api/apps[?id=…]` | Family capability catalog (12 apps) |
+| `GET /artcraft/api/apps[?id=…]` | Family capability catalog (13 apps + command-family stats) |
+| `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | Delivery QC: platform-spec checks with fix commands |
+| `GET /artcraft/api/skills` | Bundled skill pack listing (9 skills + their reference files) |
 | `POST /artcraft/api/discover` | Family install discovery + config self-repair |
 | `GET /artcraft/api/update/check` · `POST /artcraft/api/update/apply` | The plugin's own update |
 
