@@ -27,14 +27,15 @@ for agents from day one.
 This plugin brings that surface into DeepSeek Harness, so an AI agent can *operate* the apps —
 not just talk about them:
 
-- **In chat** — eight agent tools let any Harness session check the toolchain, run CLI commands,
-  send control-channel commands to a running app, do bridged file operations, and consult a
-  per-app capability catalog.
-- **A bundled craft skill pack** — seven skills (`artcraft-ops`, `artcraft-shot-language`,
+- **In chat** — nine agent tools let any Harness session check the toolchain, run CLI commands,
+  send control-channel commands to a running app, do bridged file operations, run delivery QC,
+  and consult a per-app capability catalog.
+- **A bundled craft skill pack** — nine skills (`artcraft-ops`, `artcraft-shot-language`,
   `artcraft-edit-rhythm`, `artcraft-color-light`, `artcraft-sound-design`, `artcraft-motion-vfx`,
-  `artcraft-delivery-qc`) teach the agent *how* to drive the suite fluently, which effect to reach
-  for, and how to design shot language, pacing, grade, sound and delivery. They ship inside the
-  plugin and load on demand.
+  `artcraft-delivery-qc`, `artcraft-style-bible`, `artcraft-film-study`) teach the agent *how* to
+  drive the suite fluently, which effect to reach for, how to design shot language, pacing, grade
+  and sound, how to lock a consistent look across episodes, and how to break a film down into
+  evidence. They ship inside the plugin and load on demand.
 - **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
   no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
   a node-based AI short-drama storyboard canvas, but any front end can use it.

@@ -25,12 +25,13 @@ Adobe 对标工具，共 **13 个应用**：**PhotoCraft**（Photoshop）、**Ve
 
 本插件把这套自动化面接进 DeepSeek Harness，让 AI 不只是"谈论"这些软件，而是真的**操作**它们：
 
-- **对话里** —— 八个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
-  App 发控制通道命令、做桥接文件操作、查每个应用的能力目录。
-- **随插件分发的技能包** —— 七个技能（`artcraft-ops`、`artcraft-shot-language`、
+- **对话里** —— 九个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
+  App 发控制通道命令、做桥接文件操作、跑交付质检、查每个应用的能力目录。
+- **随插件分发的技能包** —— 九个技能（`artcraft-ops`、`artcraft-shot-language`、
   `artcraft-edit-rhythm`、`artcraft-color-light`、`artcraft-sound-design`、`artcraft-motion-vfx`、
-  `artcraft-delivery-qc`）教 agent 怎么调得顺、什么时候用哪种效果、镜头语言与节奏怎么设计、
-  影调/声音/交付怎么把关；随包内置、按需加载。
+  `artcraft-delivery-qc`、`artcraft-style-bible`、`artcraft-film-study`）教 agent 怎么调得顺、
+  什么时候用哪种效果、镜头语言与节奏怎么设计、影调/声音/交付怎么把关、跨集一致性怎么锁、
+  以及怎么把一部片拆成可回溯的证据。随包内置、按需加载。
 - **浏览器里** —— 同源 HTTP API（`/artcraft/api/*`），任何 Harness 前端都能直接调用：无 CORS、
   无密钥。它为 [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md)（节点式 AI 短剧
   分镜画布）而建，但任何前端都可用。

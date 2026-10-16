@@ -494,6 +494,187 @@ async function statusInfo(cfg, meta) {
   };
 }
 
+/* ============================ 交付质检（确定性规则） ============================ */
+
+/**
+ * 质检原则：只报事实，不下判断（判定交给调用方/agent）。
+ * 每条 check 给 level(ok|warn|fail|manual) + 实测值 + 建议命令。
+ */
+const QC_KINDS = [
+  { kind: 'video', bin: 'filmcraft', re: /\.(mp4|mov|mkv|webm|avi|m4v|mxf)$/i, args: (p) => ['probe', p] },
+  { kind: 'audio', bin: 'soundcraft', re: /\.(wav|aif|aiff|mp3|m4a|flac|aac|ogg)$/i, args: (p) => ['info', p] },
+  { kind: 'image', bin: 'photocraft', re: /\.(png|jpe?g|tiff?|webp|bmp|gif|pcraft|psd|exr)$/i, args: (p) => ['info', p, '--compact'] },
+  { kind: 'pdf', bin: 'pdfcraft', re: /\.pdf$/i, args: (p) => ['info', p] },
+  { kind: 'doc', bin: 'wordcraft', re: /\.(docx|doc|odt|rtf)$/i, args: (p) => ['info', p] },
+  { kind: 'sheet', bin: 'gridcraft', re: /\.(xlsx|xls|csv|tsv|ods)$/i, args: (p) => ['info', p, '--json'] },
+  { kind: 'deck', bin: 'deckcraft', re: /\.(pptx|ppt|odp|deckcraft)$/i, args: (p) => ['info', p] },
+  { kind: 'fig', bin: 'figcraft', re: /\.(figcraft|fig)$/i, args: (p) => ['info', p, '--json'] },
+  { kind: 'cad', bin: 'cadcraft', re: /\.(dxf|dwg)$/i, args: (p) => ['info', p] },
+  { kind: 'design', bin: 'designcraft', re: /\.(indd|idml|icml|designcraft)$/i, args: null },
+];
+
+const PLATFORM_SPECS = {
+  bilibili: { label: 'B 站/横屏', width: 1920, height: 1080, fps: [24, 25, 30, 50, 60], loudness: -14, tp: -1 },
+  youtube: { label: 'YouTube/横屏', width: 1920, height: 1080, fps: [24, 25, 30, 50, 60], loudness: -14, tp: -1 },
+  douyin: { label: '抖音/竖屏', width: 1080, height: 1920, fps: [30, 60], loudness: -14, tp: -1 },
+  reels: { label: 'Reels/竖屏', width: 1080, height: 1920, fps: [30, 60], loudness: -14, tp: -1 },
+  shorts: { label: 'Shorts/竖屏', width: 1080, height: 1920, fps: [30, 60], loudness: -14, tp: -1 },
+  wechat: { label: '视频号/竖屏', width: 1080, height: 1920, fps: [30], loudness: -14, tp: -1 },
+  broadcast: { label: '广播 EBU R128', width: 1920, height: 1080, fps: [25, 50, 29.97, 59.94], loudness: -23, tp: -2 },
+  podcast: { label: '播客（纯音频）', audioOnly: true, loudness: -16, tp: -1.5 },
+};
+
+/** 从 CLI 输出里尽力抽出 JSON（前面可能有日志行） */
+function extractJson(text) {
+  const t = String(text ?? '');
+  const start = t.search(/[[{]/);
+  if (start < 0) return null;
+  for (let end = t.length; end > start; end--) {
+    const slice = t.slice(start, end).trim();
+    if (!slice || (slice[0] === '{' && !slice.endsWith('}')) || (slice[0] === '[' && !slice.endsWith(']'))) continue;
+    try { return JSON.parse(slice); } catch { /* 继续缩短 */ }
+  }
+  return null;
+}
+
+function qcKindFor(file) {
+  for (const k of QC_KINDS) if (k.re.test(file)) return k;
+  return null;
+}
+
+function num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+
+/** 深挖对象树，找第一个匹配键（不同成员的字段命名不统一） */
+function dig(obj, keys, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 4) return null;
+  for (const k of keys) if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+  for (const v of Object.values(obj)) {
+    if (v && typeof v === 'object') { const r = dig(v, keys, depth + 1); if (r !== null) return r; }
+  }
+  return null;
+}
+
+async function runQc(cfg, { path: rawPath, platform, kind: wantKind } = {}) {
+  const file = resolveCallerPath(rawPath);
+  const st = await fs.stat(file).catch(() => null);
+  if (!st || !st.isFile()) throw new Error('文件不存在或不是常规文件: ' + file);
+  const k = wantKind ? QC_KINDS.find((x) => x.kind === wantKind) : qcKindFor(file);
+  if (!k) throw new Error('无法识别文件类型（可用 kind 显式指定: ' + QC_KINDS.map((x) => x.kind).join('|') + '）');
+
+  const spec = platform ? PLATFORM_SPECS[String(platform).toLowerCase()] : null;
+  if (platform && !spec) throw new Error('未知 platform: ' + platform + '（可用: ' + Object.keys(PLATFORM_SPECS).join('|') + '）');
+
+  const checks = [];
+  const add = (id, level, detail, fix) => checks.push({ id, level, detail, ...(fix ? { fix } : {}) });
+
+  // 通用：文件体量
+  st.size > 0 ? add('file.size', 'ok', `${(st.size / 1048576).toFixed(2)} MB`) : add('file.size', 'fail', '文件为空');
+
+  // 成员探针
+  let probe = null; let raw = ''; let bin = null; let exe = null; let probeOk = false;
+  if (k.args) {
+    try {
+      exe = await resolveBin(cfg, k.bin);
+      bin = k.bin;
+      const r = await runProcess(exe, k.args(file), { timeoutMs: 120000 });
+      raw = (r.stdout || '') + (r.stderr ? '\n' + r.stderr : '');
+      probe = extractJson(r.stdout) ?? extractJson(raw);
+      probeOk = r.ok && !!probe;
+      probeOk ? add('probe', 'ok', `${k.bin} ${k.args(file)[0]} 成功`)
+        : add('probe', probe ? 'warn' : 'fail', probe ? '探针有输出但退出码非 0' : `探针失败：${(r.stderr || '').split('\n')[0] || '无输出'}`, `artcraft_cli { bin:"${k.bin}", args:${JSON.stringify(k.args(file))} }`);
+    } catch (e) {
+      add('probe', 'fail', `无法执行 ${k.bin}: ${String(e?.message ?? e)}`, `artcraft_status 检查 bins.${k.bin} 路径`);
+    }
+  } else {
+    add('probe', 'manual', `${k.bin} 无 info 子命令，需打开工程检查`, `artcraft_cli { bin:"${k.bin}", args:["commands","--json"] }`);
+  }
+
+  // 按类型核对
+  if (probe && k.kind === 'video') {
+    const w = num(dig(probe, ['width', 'videoWidth']));
+    const h = num(dig(probe, ['height', 'videoHeight']));
+    const fps = num(dig(probe, ['fps', 'frameRate', 'frame_rate']));
+    const dur = num(dig(probe, ['seconds', 'duration', 'durationSeconds']));
+    const audioStreams = dig(probe, ['audioStreams', 'audio_streams', 'audioTracks']);
+    if (w && h) add('video.resolution', 'ok', `${w}×${h}`); else add('video.resolution', 'manual', '未能从探针读到分辨率');
+    if (fps) add('video.fps', 'ok', `${fps} fps`);
+    if (dur) add('video.duration', 'ok', `${dur.toFixed(2)} s`);
+    const hasAudio = Array.isArray(audioStreams) ? audioStreams.length > 0 : audioStreams !== null ? true : null;
+    if (hasAudio === false) add('video.audio', 'warn', '未检测到音轨', '确认是否需要静音交付');
+    else if (hasAudio === true) add('video.audio', 'ok', '存在音轨');
+    if (spec) {
+      if (spec.audioOnly) add('platform.match', 'warn', `${spec.label} 需要纯音频交付，当前是视频`);
+      if (w && h && (spec.width !== w || spec.height !== h)) {
+        add('platform.resolution', 'warn', `${w}×${h} ≠ 目标 ${spec.width}×${spec.height}`, `按目标画幅重排或改用对应平台导出预设`);
+      } else if (w && h) add('platform.resolution', 'ok', `符合 ${spec.label}`);
+      if (fps && spec.fps && !spec.fps.includes(fps)) add('platform.fps', 'warn', `${fps} fps 不在推荐 ${spec.fps.join('/')}`);
+    }
+    add('loudness', 'manual', '文件响度需在应用内测量', `soundcraft bounce 返回 lufs/true_peak_db；或用 FilmCraft essentialSound.inspect + autoMatch { target: ${spec?.loudness ?? -14} }`);
+  }
+
+  if (probe && k.kind === 'audio') {
+    const sr = num(dig(probe, ['sample_rate', 'sampleRate']));
+    const ch = num(dig(probe, ['channels']));
+    const sec = num(dig(probe, ['seconds', 'duration']));
+    const fmt = dig(probe, ['sample_format', 'sampleFormat', 'format']);
+    if (sr) add('audio.sampleRate', sr >= 44100 ? 'ok' : (sr >= 32000 ? 'warn' : 'fail'), `${sr} Hz`, sr < 44100 ? '交付建议 ≥ 44.1 kHz' : undefined);
+    if (ch) add('audio.channels', 'ok', `${ch} ch`);
+    if (sec) add('audio.duration', 'ok', `${sec.toFixed(2)} s`);
+    if (fmt) add('audio.format', 'ok', String(fmt));
+    add('loudness', 'manual', '需在应用内测量或 bounce 时读取', `soundcraft run --in <session> --bounce <out> 的返回含 lufs/true_peak_db；目标 ${spec?.loudness ?? -14} LUFS`);
+  }
+
+  if (probe && k.kind === 'image') {
+    const w = num(dig(probe, ['width'])); const h = num(dig(probe, ['height'])); const depth = num(dig(probe, ['depth']));
+    if (w && h) add('image.size', 'ok', `${w}×${h}`);
+    if (depth) add('image.depth', 'ok', `${depth} bit/通道`);
+    if (spec && !spec.audioOnly && w && h && (spec.width !== w || spec.height !== h)) {
+      add('platform.resolution', 'warn', `${w}×${h} ≠ 目标 ${spec.width}×${spec.height}`, '按目标画幅导出');
+    }
+  }
+
+  if (probe && (k.kind === 'pdf' || k.kind === 'doc' || k.kind === 'deck' || k.kind === 'sheet')) {
+    const pages = num(dig(probe, ['pages', 'pageCount', 'page_count']));
+    const enc = dig(probe, ['encrypted']);
+    const sheets = dig(probe, ['sheets']);
+    if (pages) add('doc.pages', 'ok', `${pages} 页`);
+    if (enc === true) add('doc.encrypted', 'warn', '文档已加密', '确认交付对象可打开；必要时 pdfcraft protect.remove');
+    if (Array.isArray(sheets)) {
+      add('sheet.count', 'ok', `${sheets.length} 个工作表`);
+      const used = sheets.map((s) => s?.usedRange).filter(Boolean);
+      used.length ? add('sheet.usedRange', 'ok', used.slice(0, 3).join(' / ')) : add('sheet.usedRange', 'warn', '工作表未见已用区域', '确认数据是否已写入');
+      const charts = sheets.reduce((n, s) => n + (Array.isArray(s?.charts) ? s.charts.length : 0), 0);
+      add('sheet.charts', charts > 0 ? 'ok' : 'warn', `${charts} 个图表`);
+    }
+    if (k.kind === 'pdf') {
+      add('doc.a11y', 'manual', '无障碍需在 PdfCraft 内跑检查', `artcraft_cli { bin:"pdfcraft", args:["run","a11y.check","path=<file>"] }（或 a11y.report 出报告）`);
+      add('doc.print', 'manual', '印刷尺寸/出血需测量', `artcraft_cli { bin:"pdfcraft", args:["run","measure.info"] }`);
+    }
+    if (k.kind === 'doc') {
+      add('doc.a11y', 'manual', 'Word 侧无障碍需在应用内检查', 'artcraft_cli { bin:"wordcraft", args:["run","--cmd","file.accessibility"] }');
+      const comments = num(dig(probe, ['comments']));
+      if (comments !== null) add('doc.comments', comments === 0 ? 'ok' : 'warn', `${comments} 条批注`, comments ? '交付前清点批注（review.changes）' : undefined);
+    }
+    if (k.kind === 'deck') add('deck.review', 'manual', '动画/转场与备注需在应用内核对', 'artcraft_cli { bin:"deckcraft", args:["commands","animation"] }');
+  }
+
+  const fails = checks.filter((c) => c.level === 'fail').length;
+  const warns = checks.filter((c) => c.level === 'warn').length;
+  const manuals = checks.filter((c) => c.level === 'manual').length;
+  return {
+    path: file,
+    kind: k.kind,
+    bin,
+    exe,
+    platform: spec ? { id: String(platform).toLowerCase(), ...spec } : null,
+    verdict: fails ? 'fail' : warns ? 'warn' : manuals ? 'pass-with-manual-checks' : 'pass',
+    counts: { fail: fails, warn: warns, manual: manuals, ok: checks.filter((c) => c.level === 'ok').length },
+    checks,
+    probe,
+    rawTail: raw ? raw.slice(-1200) : null,
+  };
+}
+
 /* ============================ HTTP 基础设施 ============================ */
 
 function sendJson(res, code, obj) {
@@ -994,6 +1175,25 @@ export function apply(ctx) {
       },
     });
 
+    attempt({
+      name: 'artcraft_qc',
+      description: '交付质检（确定性规则）：对产物跑家族探针并按平台规格核对，返回 PASS/WARN/FAIL/MANUAL 清单与修复命令。支持 video/audio/image/pdf/doc/sheet/deck/fig/cad。用法：path=产物绝对路径；platform 可选（bilibili|youtube|douyin|reels|shorts|wechat|broadcast|podcast）核对画幅/帧率/响度目标；kind 可选，强制指定类型。只报事实与实测值，判定留给调用方。',
+      schema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '待检产物绝对路径（或 ~/ 展开）' },
+          platform: { type: 'string', enum: Object.keys(PLATFORM_SPECS), description: '可选：目标平台，用于规格核对' },
+          kind: { type: 'string', enum: QC_KINDS.map((k) => k.kind), description: '可选：强制指定文件类型' },
+        },
+        required: ['path'],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const cfg = await loadConfig();
+        return runQc(cfg, { path: args.path, platform: args.platform, kind: args.kind });
+      },
+    });
+
     return () => {
       for (const d of disposers) { try { d(); } catch { /* ignore */ } }
     };
@@ -1186,6 +1386,29 @@ export function apply(ctx) {
           controlProtocol: catalog.controlProtocol,
           apps: catalog.apps.map((a) => ({ id: a.id, name: a.name, tagline: a.tagline, ref: a.ref, cli: a.cli, control: a.control, mcp: a.mcp, stage: a.stage })),
         });
+      }),
+
+      makeRoute(`/${NAME}/api/qc`, async (req, res) => {
+        const cfg = await loadConfig();
+        const url = new URL(req.url, 'http://x');
+        if (req.method === 'GET') {
+          sendJson(res, 200, await runQc(cfg, {
+            path: url.searchParams.get('path') ?? url.searchParams.get('rel'),
+            platform: url.searchParams.get('platform') ?? undefined,
+            kind: url.searchParams.get('kind') ?? undefined,
+          }));
+          return;
+        }
+        if (req.method === 'POST') {
+          const body = await readJson(req);
+          sendJson(res, 200, await runQc(cfg, {
+            path: body.path ?? body.rel ?? url.searchParams.get('path'),
+            platform: body.platform,
+            kind: body.kind,
+          }));
+          return;
+        }
+        throw new Error('仅支持 GET/POST');
       }),
 
       makeRoute(`/${NAME}/api/control`, async (req, res) => {
