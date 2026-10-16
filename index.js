@@ -1139,7 +1139,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_recipes',
-      description: '内置专家处理方案库（v2）：8 套专业配方（短剧海报、分镜批量调色、横转竖、响度标准化、字幕生成与烧录、动态片头、多平台分发包、先探测后验证纪律）+ 8 条「任务 → 技能 → 命令链」编排模板（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付）。action=list 列配方；action=get + id 取配方详情；action=chains 列编排链；action=chain + id 取完整命令链。配方中的 skills 字段指名应先读的技能包。',
+      description: '内置专家处理方案库（v2）：8 套专业配方（短剧海报、分镜批量调色、横转竖、响度标准化、字幕生成与烧录、动态片头、多平台分发包、先探测后验证纪律）+ 11 条「任务 → 技能 → 命令链」编排模板（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付、文档交付、批量横转竖、封面缩略图、多语言字幕）。action=list 列配方；action=get + id 取配方详情；action=chains 列编排链；action=chain + id 取完整命令链。配方中的 skills 字段指名应先读的技能包。',
       schema: {
         type: 'object',
         properties: {

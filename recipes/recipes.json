@@ -311,6 +311,58 @@
         { "app": "wordcraft", "cmd": "references.bibliography", "note": "文献与引用规范（学术交付）" }
       ],
       "verify": ["a11y.check 无致命项", "尺寸/边距符合印刷或平台要求", "修订与批注已处理", "加密与权限符合约定", "体积与页数符合交付限制"]
+    },
+    {
+      "id": "vertical-batch",
+      "title": "批量横转竖（多素材/多平台）",
+      "skills": ["artcraft-shot-language", "artcraft-ops", "artcraft-delivery-qc"],
+      "when": "一批横屏素材要批量出竖屏版本，且不能逐条手工重排",
+      "steps": [
+        { "app": "filmcraft", "cmd": "probe", "note": "先摸清每条素材的画幅/帧率/VFR（决定是否需要统一帧率）" },
+        { "app": "filmcraft", "cmd": "file.newSequence", "params": { "width": 1080, "height": 1920, "fps": 30 }, "note": "目标序列规格一次定好" },
+        { "app": "filmcraft", "cmd": "timeline.place", "note": "逐条放置，或批量脚本（run script.jsonl）按清单铺轨" },
+        { "app": "filmcraft", "cmd": "effects.setParam", "note": "运动/缩放参数保留主体；主体偏侧时用位移而非居中裁切" },
+        { "app": "filmcraft", "cmd": "effects.addKeyframe", "note": "需要跟随主体时打关键帧（配合 keys 缓动逻辑）" },
+        { "app": "photocraft", "cmd": "batch", "params": { "actions": "<项目>/craft/reframe.json", "in": "<项目>/media", "out": "<项目>/out/frames" }, "note": "静帧素材走 PhotoCraft 批量动作" },
+        { "app": "deckcraft", "cmd": "render", "params": { "scale": 1 }, "note": "幻灯片素材渲染成竖屏图（--slide/--all 可选）" },
+        { "app": "filmcraft", "cmd": "file.exportMedia", "params": { "format": "h264", "width": 1080, "height": 1920 }, "note": "统一导出" },
+        { "app": "filmcraft", "cmd": "probe", "note": "产物复核" }
+      ],
+      "verify": ["批量产物画幅一致", "主体未切脸/未切关键信息", "帧率统一（无 VFR 抖动）", "artcraft_qc platform=douyin 通过"]
+    },
+    {
+      "id": "cover-thumbnail",
+      "title": "封面 / 缩略图与图文包装",
+      "skills": ["artcraft-shot-language", "artcraft-delivery-qc"],
+      "when": "成片要配封面、缩略图、社交长图或图文包",
+      "steps": [
+        { "app": "filmcraft", "cmd": "render", "params": { "seconds": 3, "out": "<项目>/craft/cover-base.png" }, "note": "从成片抓一帧作为底图（挑信息量最大的一帧）" },
+        { "app": "photocraft", "cmd": "run", "params": { "cmd": "image.adjustments.curves" }, "note": "底图影调微调（与正片配方一致，见 artcraft-style-bible）" },
+        { "app": "photocraft", "cmd": "run", "params": { "cmd": "filter.sharpen.smartSharpen" }, "note": "缩略图要小尺寸可读：适度锐化" },
+        { "app": "photocraft", "cmd": "run", "params": { "cmd": "layer.newText" }, "note": "标题文字：显式字体（如 Noto Sans SC），层级 ≥ 2 级，四周留 5% 安全边距" },
+        { "app": "figcraft", "cmd": "export", "params": { "format": "png" }, "note": "或改用 FigCraft 用组件/变量批量出多尺寸封面（1:1 / 9:16 / 16:9）" },
+        { "app": "deckcraft", "cmd": "render", "note": "图文轮播：一张一张渲染成图" },
+        { "app": "photocraft", "cmd": "convert", "params": { "format": "jpg", "quality": 92 }, "note": "平台上传用小体积 JPG（质量 90+ 避免糊）" }
+      ],
+      "verify": ["文字在安全区内、无溢出", "缩略图缩小后仍可读", "与正片影调一致", "各平台尺寸齐全"]
+    },
+    {
+      "id": "multilingual-subs",
+      "title": "多语言字幕与配音交付",
+      "skills": ["artcraft-edit-rhythm", "artcraft-sound-design", "artcraft-delivery-qc"],
+      "when": "一条片要出多语言字幕（可切换轨）或外语配音版本",
+      "steps": [
+        { "app": "filmcraft", "cmd": "transcript.generate", "params": { "language": "auto" }, "note": "先得到原文时间轴" },
+        { "app": "filmcraft", "cmd": "transcript.createCaptions", "note": "生成原文字幕（maxChars 按语言调整：中文 ≤15，西文 ≤42 字符）" },
+        { "app": "filmcraft", "cmd": "captions.newTrack", "params": { "format": "Subtitle", "language": "en" }, "note": "每种语言一条字幕轨（language 字段用于播放器选择）" },
+        { "app": "filmcraft", "cmd": "captions.import", "params": { "path": "<译文 srt>" }, "note": "导入译文；时间轴复用原文，只换文本" },
+        { "app": "filmcraft", "cmd": "captions.setStyle", "note": "各语言统一字体/字号/描边（非拉丁文字注意字体覆盖）" },
+        { "app": "filmcraft", "cmd": "captions.export", "params": { "format": "srt" }, "note": "同时导出平台所需格式：srt / vtt / scc / mcc / stl / ttml / dfxp" },
+        { "app": "filmcraft", "cmd": "tts.voices", "note": "需要配音时列可用音色（tts.create → tts.render）" },
+        { "app": "filmcraft", "cmd": "essentialSound.autoMatch", "params": { "target": -14 }, "note": "配音混入后重新统一响度" },
+        { "app": "filmcraft", "cmd": "file.exportMedia", "note": "交付：字幕内嵌或外挂（按平台要求）" }
+      ],
+      "verify": ["各语言时间轴一致", "非拉丁文字无缺字/断行错误", "字幕在安全区内", "配音后响度仍达标"]
     }
   ]
 }

@@ -142,7 +142,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_fs` | 桥接文件操作 —— list / stat / 读 / 写 / 建目录，路径由调用方绝对指定 |
 | `artcraft_discover` | 家族安装自动探测：填充缺失路径、自动纠正失效路径 |
 | `artcraft_apps` | 12 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 |
-| `artcraft_recipes` | 内置专家配方（8 套）**与 8 条「任务→技能→命令链」编排**（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付） |
+| `artcraft_recipes` | 内置专家配方（8 套）**与 11 条「任务→技能→命令链」编排**（短剧成片、剧本到分镜、RAW 冲洗、拉片分析、音频后期、合成镜头、设计系统、文档交付、批量横转竖、封面包装、多语言字幕） |
 | `artcraft_update` | 插件自身更新（检查 / 应用） |
 
 ## 在浏览器里驱动

@@ -58,6 +58,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('');
       const [out, setOut] = useState('');
       const [done, setDone] = useState(false);
+      const [skills, setSkills] = useState(null);
       const alive = useRef(true);
       useEffect(() => () => { alive.current = false; }, []);
 
@@ -73,6 +74,11 @@ window.__ModuleLoader__.load({
           } catch { /* 旧版无此路由 → 静默跳过 */ }
           const s = await api('/status');
           if (alive.current) { setStatus(s); setStatusErr(null); }
+          // 技能包清单（旧版无此路由 → 静默跳过，不影响状态展示）
+          try {
+            const sk = await api('/skills');
+            if (alive.current) setSkills(sk);
+          } catch { /* 忽略 */ }
         } catch (e) { if (alive.current) setStatusErr(String(e.message || e)); }
         finally { if (alive.current) setBusy(''); }
       }, []);
@@ -137,7 +143,10 @@ window.__ModuleLoader__.load({
           ? h('div', { className: 'dshac-muted' }, '未连接：' + statusErr + '（插件可能未注册或 Harness 需要重启）')
           : h('div', null, Object.keys(LABELS).map(binRow),
               status?.config?.path ? h('div', { className: 'dshac-row dshac-muted' },
-                '配置目录：', h('span', { className: 'dshac-mono' }, status.config.path)) : null),
+                '配置目录：', h('span', { className: 'dshac-mono' }, status.config.path)) : null,
+              skills?.count ? h('div', { className: 'dshac-row dshac-muted' },
+                '技能包：', h('span', { className: 'dshac-mono' }, skills.count + ' 个'), '（' +
+                skills.skills.map((s) => s.name.replace(/^artcraft-/, '')).join(' · ') + '）') : null),
         h('div', { className: 'dshac-row', style: { marginTop: '10px' } },
           h('span', { className: 'dshac-muted' },
             '当前 v' + (status?.version ?? upd?.current ?? '?') +

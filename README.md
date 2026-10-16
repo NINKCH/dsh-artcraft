@@ -159,7 +159,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
 | `artcraft_discover` | Family install auto-discovery: fills missing paths, auto-corrects stale ones |
 | `artcraft_apps` | Capability catalog for all 12 apps: CLI subcommands, control ports, MCP, repo/docs links |
-| `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 8 task→skill→command chains** (vertical short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system) |
+| `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 11 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles) |
 | `artcraft_update` | The plugin's own update (check / apply) |
 
 ## Driving it from the browser
