@@ -306,16 +306,4 @@ GitHub 上传本仓库即可：`README.md` 英文优先，附
 
 ## 许可
 
-**本插件（`@ninkch/dsh-artcraft`）：Apache-2.0**（见 [LICENSE](LICENSE)）。不包含 ArtCraft 应用的任何代码 —— 只调用其公开自动化面
-（无头 CLI + JSON 控制通道）。
-
-**ArtCraft 各应用本身并非 OSI 开源**：它们采用 **ArtCraft License (WIP)** —— 一种 "fair source"
-（公平源代码）许可（[全文见 NOTICE.md](NOTICE.md)）。给构建在其上的使用者划重点：
-
-- ✅ 免费使用；可为私人目的备份、复制、修改、编译
-- ✅ **用这些应用创作的所有媒体完全归你** —— 渲染出的短剧成片就是你的商业资产，没有附加条件
-- ❌ 不得把应用当作自己的软件出售；不得用其代码开发竞品
-- ❌ 不得在 fork 中移除社区/捐赠链接；未经许可不得用 ArtCraft 名称、Logo 或吉祥物做商业宣传
-- 🤝 团队公开承诺：若业务终结，软件将转为 OSI 认可的开源许可
-
-对 AI 短剧工作室的务实解读：本地随便用，别动应用里的社区链接，卖你的片子——而不是卖应用。
+**本插件（`@ninkch/dsh-artcraft`）：Apache-2.0**（见 [LICENSE](LICENSE)）。不包含 ArtCraft 应用的任何代码——只调用其公开自动化面（无头 CLI + JSON 控制通道）。ArtCraft 各应用本身是 ArtCraft 团队的独立项目，应用自身的条款以其许可为准。

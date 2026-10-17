@@ -332,22 +332,7 @@ explicit approval.
 
 ## License
 
-**This plugin (`@ninkch/dsh-artcraft`): Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
-ArtCraft apps' code — it only drives their public automation surfaces (headless CLI + JSON
-control channel).
-
-**The ArtCraft apps themselves** are *not* OSI open source: they are distributed under the
-**ArtCraft License (WIP)**, a "fair source" license ([verbatim text](NOTICE.md)). The short
-version for anyone building on them:
-
-- ✅ free to use; back up, copy, modify and compile for private purposes
-- ✅ **every piece of media you create with the apps is yours** — your rendered episodes are
-  commercial assets, full stop
-- ❌ no selling the apps as your own software, no competing products built from their code
-- ❌ no stripping community/donation links from a fork; no using the ArtCraft name, logo or
-  mascots to promote a business without permission
-- 🤝 the team's public promise: if the business ever ends, the software transitions to an
-  OSI-approved open-source license
-
-Practical reading for an AI short-drama studio: run the apps locally, leave their community
-links alone, and sell your films — not the apps.
+This plugin (`@ninkch/dsh-artcraft`): **Apache-2.0** — see [LICENSE](LICENSE). It ships none of the
+ArtCraft apps' code; it only drives their public automation surfaces (headless CLI + JSON control
+channel). The ArtCraft apps themselves are separate projects by the ArtCraft team — the apps' own
+licenses apply to the apps.
