@@ -48,6 +48,7 @@
 - npm 经典令牌（含 Automation）**不能发布**（新政策）；发布走 Trusted Publishing（OIDC）或带 bypass-2FA 的 Granular 令牌（npm 已宣布 2027-01 停用 bypass 直发，届时迁 GitHub Actions 可信发布/环境审批 —— 本仓库已经用 OIDC，无感）。
 - bypass-2FA 令牌**不能 unpublish** —— 删除已发布包只能维护者在 npmjs.com 网页操作。
 - DSH 工具定义必须声明 `output: { schema, render?, presentationMeta? }`，缺了整个工具注册失败。
+  **issue #1（2026-10-12）复盘**：`attempt()` 曾把兜底 `output` 算出来却**没传进 `register()`**——旧注册器宽松放行（维护者机器全绿），44.0.0 桌面端严格拒绝（10 个工具全灭，HTTP 却正常，极易误判为环境问题）。已修：两个 shape 均携带 `output`；自测加**注册侧断言**（假 ctx 捕获 shape，断言 `output.render` 为函数）。新增工具时若用定制渲染，`def.output` 直接写在 attempt 定义里。
 - 改 registry/账号类配置前先确认默认 registry（本机默认是淘宝镜像，发布必须显式指定官方源）。
 - **打标签前必须同步 package.json 的 version**：v0.2.4 首次打标签时 index.js 升了版本但 package.json 漏改 → `npm publish` 撞"不能覆盖已发布版本"而失败。现在工作流有守卫（tag ≠ package.json 版本 → 第一步就失败），但根上要在打标签前自查。
 - 检查更新的语义：**只对比 npm 版本号**（本地领先不算待更新、版本相同即最新），绝不比较 SHA；更新完成后只提示 + 等用户决定何时重启，绝不自动刷新/重启页面。

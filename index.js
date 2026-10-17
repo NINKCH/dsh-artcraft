@@ -55,7 +55,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'artcraft';
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const BINS = [
@@ -1045,13 +1045,15 @@ export function apply(ctx) {
   ctx.effect(() => {
     const disposers = [];
     const attempt = (def) => {
+      // 44.0.0 起注册器强制要求 output（缺了整工具拒注册，见 RELEASING.md 教训与 issue #1）：
+      // 兜底 output 必须随 shape 一起传入，两个命名约定都要带。
       const output = def.output ?? {
         schema: { type: 'object', additionalProperties: true },
         render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
       };
       for (const shape of [
-        { name: def.name, description: def.description, parameters: def.schema, execute: def.execute },
-        { name: def.name, description: def.description, inputSchema: def.schema, handler: def.execute },
+        { name: def.name, description: def.description, parameters: def.schema, execute: def.execute, output },
+        { name: def.name, description: def.description, inputSchema: def.schema, handler: def.execute, output },
       ]) {
         try {
           const d = ctx.tools.register(shape);
@@ -1302,6 +1304,22 @@ export function apply(ctx) {
     attempt({
       name: 'artcraft_qc',
       description: '交付质检（确定性规则）：对产物跑家族探针并按平台规格核对，返回 PASS/WARN/FAIL/MANUAL 清单与修复命令。支持 video/audio/image/pdf/doc/sheet/deck/fig/cad。用法：path=产物绝对路径；platform 可选（bilibili|youtube|douyin|reels|shorts|wechat|broadcast|podcast）核对画幅/帧率/响度目标；kind 可选，强制指定类型；live 默认 true——若检测到运行中的 App，会额外取示波器读数（filmcraft scopes.read）、Essential Sound 体检、字幕长度与 EffectCraft 能力表（结果在 appChecks）。只报事实与实测值，判定留给调用方。',
+      output: {
+        schema: { type: 'object', additionalProperties: true },
+        render: (_args, v) => {
+          if (!v || !Array.isArray(v.checks)) return [{ type: 'text', text: JSON.stringify(v, null, 2) }];
+          const lines = [`QC ${String(v.verdict || '').toUpperCase()}  ${v.path ?? ''}`,
+            `kind=${v.kind ?? '?'}  bin=${v.bin ?? '-'}  platform=${v.platform?.id ?? '-'}  计数=${JSON.stringify(v.counts ?? {})}`];
+          for (const c of v.checks) {
+            lines.push(`[${String(c.level).toUpperCase().padEnd(6)}] ${c.id}: ${c.detail}`);
+            if (c.fix) lines.push(`        fix: ${c.fix}`);
+          }
+          if (Array.isArray(v.appChecks) && v.appChecks.length) {
+            lines.push('appChecks: ' + JSON.stringify(v.appChecks));
+          }
+          return [{ type: 'text', text: lines.join('\n') }];
+        },
+      },
       schema: {
         type: 'object',
         properties: {
@@ -1322,6 +1340,19 @@ export function apply(ctx) {
     attempt({
       name: 'artcraft_live',
       description: '探测哪些 ArtCraft App 正在运行（控制通道活性）：对已知端口逐个调用 engine.commands 作为活性证据，返回 live 列表、耗时与当前可用命令数。用于"边看边调"前的准备——确认目标 App 已以 --control 启动。可用 ports 追加自定义端口（如 [{app:"designcraft",port:8000}]）。',
+      output: {
+        schema: { type: 'object', additionalProperties: true },
+        render: (_args, v) => {
+          if (!v || !Array.isArray(v.apps)) return [{ type: 'text', text: JSON.stringify(v, null, 2) }];
+          const lines = [`LIVE ${v.live}/${v.total}  ${v.note ?? ''}`];
+          for (const a of v.apps) {
+            lines.push(a.live
+              ? `[LIVE ] ${String(a.app).padEnd(13)} :${a.port}  ${a.commands ?? '?'} cmds, ${a.ms}ms`
+              : `[—    ] ${String(a.app).padEnd(13)} :${a.port}  ${(a.error || '').slice(0, 90)}`);
+          }
+          return [{ type: 'text', text: lines.join('\n') }];
+        },
+      },
       schema: {
         type: 'object',
         properties: {

@@ -1,6 +1,6 @@
 {
   "name": "@ninkch/dsh-artcraft",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Drive the open-source ArtCraft studio suite (13 family apps: PhotoCraft, VectorCraft, FilmCraft, LightCraft, PdfCraft, EffectCraft, DesignCraft, WordCraft, DeckCraft, GridCraft, CADCraft, SoundCraft, FigCraft) from DeepSeek Harness: agent tools, a same-origin HTTP API, a bundled craft skill pack, and plugins-page status with self-update.",
   "keywords": [
