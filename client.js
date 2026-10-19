@@ -118,6 +118,29 @@ window.__ModuleLoader__.load({
         finally { if (alive.current) setBusy(''); }
       }, []);
 
+      // 一键自动探测（AC-04）：POST /discover 做缺失项填空 + 失效路径纠正；
+      // 用户显式配置有效则原样不动（服务端保证），失败/无动作都有明确文案，不静默。
+      const runDiscover = useCallback(async () => {
+        setBusy('discover'); setOut(''); setDone(false);
+        try {
+          const r = await api('/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+          if (!alive.current) return;
+          const applied = r.applied ?? {};
+          const appliedNames = Object.keys(applied).map((k) => LABELS[k] || k);
+          setOut(
+            (r.note || '') + '\n' +
+            (appliedNames.length
+              ? '本次写入配置：' + appliedNames.join('、') + '\n'
+              : '没有需要更新的家族程序（已有配置均有效）\n') +
+            '已探测到本机安装：' + (Object.keys(r.discovered ?? {}).map((k) => LABELS[k] || k).join('、') || '（无）') + '\n' +
+            '配置文件：' + (r.configPath || '（未知）'),
+          );
+          loadStatus(); // 探测写盘后立即重读 bins 状态，灯色即变
+        } catch (e) {
+          if (alive.current) setOut('自动探测失败：' + String(e.message || e) + '（可检查插件是否注册、或手动编辑 artcraft.config.json）');
+        } finally { if (alive.current) setBusy(''); }
+      }, [loadStatus]);
+
       useEffect(() => { loadStatus(); checkUpdate(); }, [loadStatus, checkUpdate]);
 
       const bins = status?.bins ?? {};
@@ -153,6 +176,9 @@ window.__ModuleLoader__.load({
             (upd?.pendingRestart ? '（磁盘已是 v' + (upd.pendingVersion ?? upd.diskVersion ?? '?') + '，待重启）' : '') +
             (upd ? ' · npm latest v' + (upd.latest ?? '—') : '') +
             (upd?.mode ? '（' + (upd.mode === 'git' ? 'git 仓库' + (upd.gitClean === false ? ' · 有本地改动' : '') : 'npm 安装') + '）' : '')),
+          h('button', { className: 'dshac-btn', onClick: runDiscover, disabled: busy !== '',
+            title: '自动探测本机 ArtCraft 家族安装位置：缺失项填入配置，已失效的路径被纠正；你的显式有效配置不会被覆盖' },
+            busy === 'discover' ? '探测中…' : '自动探测'),
           h('button', { className: 'dshac-btn primary', onClick: checkUpdate, disabled: busy !== '' },
             busy === 'check' ? '检查中…' : '检查更新'),
           h('button', {
