@@ -21,14 +21,16 @@
 
 ## 1. 现状盘点
 
-### 1.1 artcraft 现有能力（v0.2.10）
+### 1.1 artcraft 现有能力（v0.2.10 → 现状）
+
+> 下列数字已按 0.3.1 口径更新；v0.2.10 时为 12 个 CLI / 8 个 Agent 工具（FigCraft 与 qc/live 均为 0.3.0 新增）。
 
 | 维度 | 现状 |
 |---|---|
-| 执行 | 12 个家族 CLI 白名单 + 子进程；`artcraft.config.json` 决定实际可执行文件 |
+| 执行 | 13 个家族 CLI 白名单 + 子进程；`artcraft.config.json` 决定实际可执行文件 |
 | 实时 | JSON-lines 控制通道：filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980，动态端口走 `port` 直连 |
-| 接口 | 8 个 Agent 工具 + 同源 HTTP API（status/fs/file/job/control/apps/discover/update） |
-| 知识 | `apps/catalog.json`（12 应用能力卡）、`recipes/recipes.json`（8 套专家配方） |
+| 接口 | 10 个 Agent 工具（status / cli / control / fs / discover / apps / qc / live / recipes / update）+ 同源 HTTP API（/artcraft/api/*） |
+| 知识 | `apps/catalog.json`（13 应用能力卡）、`recipes/recipes.json`（8 套专家配方） |
 
 ### 1.2 本机环境实测
 
@@ -219,7 +221,7 @@ function apply(ctx) {
 
 ### 路径 A：通用 CLI 桥接（延续 artcraft 范式，**执行后端**）
 
-把"家族 12 应用"泛化为 **toolchain registry**：`artcraft.config.json` 的 `bins` 之外增设 `skills`（或复用同一结构），登记外部引擎（`ffmpeg`、`ffprobe`、`melt`、`auto-editor`、`scenedetect`、`rife-ncnn-vulkan`、`piper`、`baocut`、`diffusion`、`npx ffmpeg-skill` 等）。
+把"家族 13 应用"泛化为 **toolchain registry**：`artcraft.config.json` 的 `bins` 之外增设 `skills`（或复用同一结构），登记外部引擎（`ffmpeg`、`ffprobe`、`melt`、`auto-editor`、`scenedetect`、`rife-ncnn-vulkan`、`piper`、`baocut`、`diffusion`、`npx ffmpeg-skill` 等）。
 
 - 优点：零耦合、许可干净（只调用不打包）、复用现有 `artcraft_cli` / job / HTTP 全套。
 - 注意：需为"裸命令 + 参数数组"补齐 PATH 解析（`resolveBin` 已支持裸命令名 → 现成）。
@@ -441,7 +443,7 @@ ffmpeg-quality-metrics dist.mp4 ref.mp4 -m psnr ssim vmaf -o qc.json
 - **许可证判定的关键区分（写入集成原则）**：插件只 **spawn 用户自行安装的独立二进制** → GPL/AGPL/CeCILL **全都可以自由调用**，不产生 copyleft 义务（"at-arms-length execution 不是衍生作品"）；风险只在**打包分发**时出现。唯一例外需谨慎的是 **AGPL §13**：若把这些程序包装成网络服务对外提供才会触发。插件自身只允许携带**命令行模板与 JSON schema**，绝不拷贝上游代码/头文件/滤镜字符串。
 - **最常被忽略的分发风险**：**NVIDIA CUDA 运行时受 CUDA EULA 约束，不是开源许可问题**——这正是优先选 **ncnn/Vulkan 变体**（而非 PyTorch/CUDA 版）的技术外理由。
 - **建议接入顺序**：`oiiotool`（合成/IO 核心）→ FFmpeg 能力探测 + 调色/稳定模板 → `realesrgan-ncnn-vulkan` → `rife-ncnn-vulkan` → OCIO CLI → *可选、用户自装* 的 `NatronRenderer` 与 Blender 后端（藏在"检测到二进制才启用"的门后）。
-- **待实测（不可凭报告下结论）**：Blender `--background/--python` 在目标版本的确切参数名；`video2x` 6.x 插帧参数拼写；Natron 的 `WriteFFmpeg` 视频写出参数面（安全设计为"序列输出 + FFmpeg 封装"）；本机 12 个家族应用里是否有 OFX host（若有，`openfx-misc` 就是免费能力扩展）。
+- **待实测（不可凭报告下结论）**：Blender `--background/--python` 在目标版本的确切参数名；`video2x` 6.x 插帧参数拼写；Natron 的 `WriteFFmpeg` 视频写出参数面（安全设计为"序列输出 + FFmpeg 封装"）；本机 13 个家族应用里是否有 OFX host（若有，`openfx-misc` 就是免费能力扩展）。
 
 ### 8.7 待补充的深挖方向
 

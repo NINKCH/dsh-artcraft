@@ -25,7 +25,7 @@ Adobe 对标工具，共 **13 个应用**：**PhotoCraft**（Photoshop）、**Ve
 
 本插件把这套自动化面接进 DeepSeek Harness，让 AI 不只是"谈论"这些软件，而是真的**操作**它们：
 
-- **对话里** —— 九个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
+- **对话里** —— 十个 Agent 工具，任何 Harness 会话都能检查工具链、执行 CLI 命令、向运行中的
   App 发控制通道命令、做桥接文件操作、跑交付质检、查每个应用的能力目录。
 - **随插件分发的技能包** —— 十一个技能（`artcraft-ops`、`artcraft-shot-language`、
   `artcraft-edit-rhythm`、`artcraft-color-light`、`artcraft-sound-design`、`artcraft-motion-vfx`、
@@ -70,7 +70,7 @@ FilmCraft 剪辑、调色、混音、烧字幕 → 导出 H.264。"生成"之后
 - **ArtCraft 应用** —— 从 [getartcraft.com](https://getartcraft.com/apps) 或
   [storytold GitHub Releases](https://github.com/storytold) 按需下载。Windows 与 Linux 的
   portable/安装包内置 CLI（`photocraft-cli.exe` 等）；macOS 的 CLI 是单独的公证 zip。
-  已验证版本：PhotoCraft 0.6、FilmCraft 0.5、EffectCraft（早期构建）。
+  已验证版本：PhotoCraft 0.9、FilmCraft 0.8、EffectCraft（早期构建）。
 - 其他什么都不需要：无 Python、无 FFmpeg —— ArtCraft 自带编解码器。
 
 ## 安装
@@ -112,8 +112,8 @@ pnpm install --dir C:/Users/<你>/.dsh/profiles/desktop
 {
   "bins": {
     // 三种写法：目录（自动拼接 <名>-cli 可执行文件）、完整 exe 路径、或走 PATH 的裸命令名
-    "photocraft":  "C:/craft/photocraft-0.6.0-windows-x64-portable",
-    "filmcraft":   "C:/craft/filmcraft-0.5.0-windows-x64-portable",
+    "photocraft":  "C:/craft/<PhotoCraft 便携目录>",
+    "filmcraft":   "C:/craft/<FilmCraft 便携目录>",
     "effectcraft": "C:/Program Files/EffectCraft"
   },
   "control": { "filmcraft": 9876, "effectcraft": 9877 }
@@ -124,7 +124,7 @@ pnpm install --dir C:/Users/<你>/.dsh/profiles/desktop
 
 ## 在对话里驱动
 
-插件注册四个工具，agent 自行编排，所以自然语言直接可用：
+插件注册十个工具，agent 自行编排，所以自然语言直接可用：
 
 > *"把 `demo/media` 里的 PNG 都用柔和 S 曲线调色、智能锐化 80，结果放进 `demo/out/graded`。"*
 
@@ -137,7 +137,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | 工具 | 用途 |
 |---|---|
-| `artcraft_status` | 工具体检：12 个 CLI 是否找到、配置目录、控制端口、进行中的任务 |
+| `artcraft_status` | 工具体检：13 个 CLI 是否找到、配置目录、控制端口、进行中的任务 |
 | `artcraft_cli` | 同步执行任意 CLI 子命令（`photocraft-cli run/batch`、`wordcraft-cli convert` 等） |
 | `artcraft_control` | 向**运行中**的 App 控制通道发一条命令（filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980，或 port 直连） |
 | `artcraft_fs` | 桥接文件操作 —— list / stat / 读 / 写 / 建目录，路径由调用方绝对指定 |

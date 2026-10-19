@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "ArtCraft 家族 12 应用的自动化能力目录。来源：官方 getartcraft.com/apps、各应用 GitHub 仓库（storytold/*）、本机 12 个 <app>-cli --help 实测（0.2.9 时点）。要拿某应用的实时命令注册表，用 artcraft_cli 跑该应用的 commands 子命令。",
+  "note": "ArtCraft 家族 13 应用的自动化能力目录。来源：官方 getartcraft.com/apps、各应用 GitHub 仓库（storytold/*）、本机 13 个 <app>-cli --help 实测（2026-10 时点）。要拿某应用的实时命令注册表，用 artcraft_cli 跑该应用的 commands 子命令。",
   "controlProtocol": "家族共用 JSON-lines 控制协议（127.0.0.1:<port>，请求 {\"id\",\"method\",\"params\"}，方法如 engine.execute / engine.commands / ui.inspect / ui.screenshot）。App 需以 --control 启动。artcraft_control 已代理有固定默认端口的应用；其余应用端口动态（app --port 启动时指定），可用 artcraft_control 的 port 参数直连。",
   "apps": [
     {

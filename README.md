@@ -27,7 +27,7 @@ for agents from day one.
 This plugin brings that surface into DeepSeek Harness, so an AI agent can *operate* the apps —
 not just talk about them:
 
-- **In chat** — nine agent tools let any Harness session check the toolchain, run CLI commands,
+- **In chat** — ten agent tools let any Harness session check the toolchain, run CLI commands,
   send control-channel commands to a running app, do bridged file operations, run delivery QC,
   and consult a per-app capability catalog.
 - **A bundled craft skill pack** — eleven skills (`artcraft-ops`, `artcraft-shot-language`,
@@ -40,9 +40,6 @@ not just talk about them:
 - **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
   no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
   a node-based AI short-drama storyboard canvas, but any front end can use it.
-- **Paths belong to the caller** — this plugin is a bridge and owns no data directory. Files read
-  or written go wherever the caller points: chat invocations default to the current conversation
-  workspace (or any path named in the prompt); the canvas writes under its own project folder.
 - **Paths belong to the caller** — this plugin is a bridge and owns no data directory. Files read
   or written go wherever the caller points: chat invocations default to the current conversation
   workspace (or any path named in the prompt); the canvas writes under its own project folder.
@@ -81,7 +78,7 @@ Everything runs locally. No cloud round-trips, no accounts, no telemetry.
 - **ArtCraft apps** — grab what you need from [getartcraft.com](https://getartcraft.com/apps)
   or the [storytold GitHub releases](https://github.com/storytold). The portable/installer builds
   ship the CLI binaries on Windows and Linux (`photocraft-cli.exe` …); macOS ships them as a
-  separate notarized zip. Versions tested: PhotoCraft 0.6, FilmCraft 0.5, EffectCraft (early).
+  separate notarized zip. Versions tested: PhotoCraft 0.9, FilmCraft 0.8, EffectCraft (early).
 - Nothing else. No Python, no FFmpeg — the ArtCraft apps bring their own codecs.
 
 ## Setup
@@ -127,8 +124,8 @@ re-read on every request — no restart needed for path changes:
   "bins": {
     // three accepted forms: a directory (the <name>-cli binary is appended),
     // a full path to the executable, or a bare name looked up on PATH
-    "photocraft":  "C:/craft/photocraft-0.6.0-windows-x64-portable",
-    "filmcraft":   "C:/craft/filmcraft-0.5.0-windows-x64-portable",
+    "photocraft":  "C:/craft/<PhotoCraft portable folder>",
+    "filmcraft":   "C:/craft/<FilmCraft portable folder>",
     "effectcraft": "C:/Program Files/EffectCraft"
   },
   "control": { "filmcraft": 9876, "effectcraft": 9877 }
@@ -140,7 +137,7 @@ re-read on every request — no restart needed for path changes:
 
 ## Driving it from chat
 
-The plugin registers four tools. The agent composes them, so plain language works:
+The plugin registers ten tools. The agent composes them, so plain language works:
 
 > *"Color-grade every PNG in `demo/media` with a soft S-curve and smart sharpening at 80, put the
 > results in `demo/out/graded`."*
@@ -154,7 +151,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | Tool | What it does |
 |---|---|
-| `artcraft_status` | Toolchain health check: which of the 12 CLIs resolved, config location, control ports, running jobs |
+| `artcraft_status` | Toolchain health check: which of the 13 CLIs resolved, config location, control ports, running jobs |
 | `artcraft_cli` | Run any CLI subcommand synchronously (`photocraft-cli run/batch`, `wordcraft-cli convert`, …) |
 | `artcraft_control` | One command over the JSON control channel of a *running* app (filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980, or pass `port`) |
 | `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
@@ -198,7 +195,7 @@ Full route list:
 | `POST /artcraft/api/control` | Synchronous control-channel call (`app` or `port`) |
 | `GET /artcraft/api/apps[?id=…]` | Family capability catalog (13 apps + command-family stats) |
 | `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | Delivery QC: platform-spec checks with fix commands |
-| `GET /artcraft/api/skills` | Bundled skill pack listing (9 skills + their reference files) |
+| `GET /artcraft/api/skills` | Bundled skill pack listing (11 skills + their reference files) |
 | `GET /artcraft/api/live[?ports=app:port,…]` | Control-channel liveness (which apps are running) |
 | `POST /artcraft/api/discover` | Family install discovery + config self-repair |
 | `GET /artcraft/api/update/check` · `POST /artcraft/api/update/apply` | The plugin's own update |
