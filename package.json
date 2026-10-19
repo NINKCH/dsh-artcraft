@@ -26,6 +26,9 @@
   "engines": {
     "node": ">=18"
   },
+  "scripts": {
+    "selftest": "node scripts/selftest.mjs"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

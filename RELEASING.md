@@ -34,6 +34,7 @@
 
 1. 在 `dev` 完成改动并自测：
    - `node --check index.js client.js skills.js`
+   - `npm run selftest`（注册侧断言：假 ctx 复刻 44.0.0 严格注册器，10/10 工具必须全过；issue #1 的回归护栏）
    - 重启 Harness 后 `GET /artcraft/api/status` 探针（三盏灯、tools.errors 为空）
    - 涉及 UI 的：插件页详情卡人工确认
 2. 向维护者汇报"改了什么 + 测了什么 + 结果"，**获得明确批准**。
