@@ -183,11 +183,13 @@ function resolveCallerPath(p) {
   let s = String(p ?? '').trim();
   if (!s) throw new Error('缺少路径参数');
   if (s === '~' || s.startsWith('~/') || s.startsWith('~\\')) s = path.join(os.homedir(), s.slice(1));
-  const abs = path.resolve(s);
-  if (!path.isAbsolute(abs)) {
-    throw new Error('需要绝对路径 —— 对话调用传当前工作空间下的绝对路径，画布传项目目录下的绝对路径（或用 base + 相对路径组合）');
+  if (!path.isAbsolute(s)) {
+    throw new Error(
+      `需要绝对路径，收到相对路径 "${s}" —— 本插件不持有数据目录，不会按进程 cwd 解析；`
+      + '请改传绝对 path=<绝对路径>，或用 base=<绝对目录> + rel=<相对路径>。',
+    );
   }
-  return abs;
+  return path.normalize(s);
 }
 
 function resolveBaseRel(base, rel) {
@@ -364,7 +366,7 @@ async function statOutputs(outputs, cwd) {
     try {
       abs = base ? path.resolve(base, spec) : resolveCallerPath(spec);
     } catch {
-      out.push({ rel: spec, exists: false, dir: false, size: null, mtime: null });
+      out.push({ rel: spec, exists: false, dir: false, size: null, mtime: null, reason: 'relative-output-without-cwd' });
       continue;
     }
     try {
@@ -1037,6 +1039,9 @@ async function updateApply() {
 
 const toolNames = [];
 const toolErrors = [];
+
+/** 单测钩子：只暴露纯函数，不改运行时行为（scripts/test-fs-paths.mjs 使用） */
+export const __testables = { resolveCallerPath, resolveBaseRel, statOutputs };
 
 export const inject = ['tools', 'webServer'];
 
