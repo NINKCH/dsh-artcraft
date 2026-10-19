@@ -6,3 +6,7 @@ craft.config.json
 .craft-data/
 node_modules/
 *.log
+
+# 权限诊断（AC-02）
+.acl-recovery/
+_acl-probe-*.txt
