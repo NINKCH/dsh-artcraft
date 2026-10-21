@@ -2,7 +2,7 @@
 
 > 效果 id 来自官方注册表（`ec.<类别>.<名称>`），共 307 个；完整清单见同目录 `effect-catalogue.md`。
 > 用法：`artcraft_cli { bin:"effectcraft", args:["exec","effect.apply","--params","{\"layer\":N,\"effect\":\"<id>\"}"] }`
-> 参数走 `effect.setParam {clip|layer, effect, param, value}`；参数 id 形如 `effects/#1/<param>`。
+> 参数走 **`prop.set`**（0.13.0 起 `effect.setParam` 已移除）：`artcraft_cli { bin:"effectcraft", args:["exec","prop.set","--params","{\"layer\":N,\"property\":\"effects/#1/<param>\",\"value\":…}"] }`；读用 `prop.get`，打点用 `prop.addKey`，表达式用 `prop.setExpression`。
 > 表中 id 均为**已验证存在**；没有把握的不要写死，先 `describe` 或查目录。
 
 ## 一、光效与氛围

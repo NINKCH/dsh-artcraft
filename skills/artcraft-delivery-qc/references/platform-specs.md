@@ -44,13 +44,16 @@
 | 交付物 | 检查项 | 命令 |
 |---|---|---|
 | PDF（阅读） | 无障碍（标签/阅读顺序/替代文本） | `pdfcraft run a11y.check` · `a11y.report` · `a11y.alt_text` |
-| PDF（印刷） | 出血、裁切标记、CMYK、尺寸 | FigCraft `export --bleed 3mm --crop-marks --cmyk`；DesignCraft `layout/type` |
+| PDF（新建） | 0.10 新增 `create`：从零生成 PDF | `pdfcraft-cli run create …`（先 `pdfcraft-cli tools` 查参数） |
+| PDF（文本勘误） | 直接改文本层 | `pdfcraft run text_edit`（0.10 新增）/ `edit.edit_text` |
+| PDF（印刷） | 出血、裁切标记、CMYK、尺寸；**印前检查** | FigCraft `export --bleed 3mm --crop-marks --cmyk`；DesignCraft `layout/type` + **`preflight.run`**（0.10 新增） |
 | PDF（长期存档） | PDF/A 合规 | `pdfcraft run standards.pdfa` |
 | PDF（传输） | 体积 | `pdfcraft run optimize.reduce`（或 `optimize.advanced`） |
 | PDF（安全） | 口令/权限 | `pdfcraft protect.password` / `protect.remove` |
 | Word 文档 | 无障碍、批注、修订、文献 | `wordcraft run --cmd file.accessibility` · `review.changes` · `references.bibliography` |
 | 表格 | 数据校验、公式、图表 | `gridcraft data.validate` / `data.validation` · `formulas.evaluate` |
-| 演示 | 转场/动画时长、备注 | `deckcraft transition.set` · `animation.timing` |
+| 演示 | 转场/动画时长、备注；讲义/母版 | `deckcraft transition.set` · `animation.timing` · `handout`（0.9 新增）/ `master` |
+| 矢量印刷交付 | 打印预设与拼版 | VectorCraft `print.setup` · `print.tiling` · `pdf.preset.*`（0.14 新增） |
 
 ## 五、命名与目录约定
 

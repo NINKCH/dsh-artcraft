@@ -16,7 +16,7 @@ description: 影调与调色决策——一级（曝光/对比/白平衡/饱和�
 | 3 | 白平衡（色温/色调） | 矢量示波器：肤色线附近 | 偏黄/偏青不察 |
 | 4 | 饱和 / 自然饱和度 | 矢量示波器不越界 | 过饱和→溢出结块 |
 
-**LightCraft 落点（122 控制 / 14 分区）**——标准冲洗顺序：
+**LightCraft 落点（122 控制 / 14 分区，0.10 未变）**——标准冲洗顺序：
 
 ```
 profile.amount → wb.temp / wb.tint → light.exposure / light.contrast /
@@ -31,6 +31,8 @@ geometry.*（透视/旋转/裁切）→ effects.texture/clarity/dehaze → grain
 **FilmCraft 落点**：`lumetri.setSection {section:"basic|creative|curves|wheels"}`、`lumetri.setInputLut`（技术 LUT：Log→709）、`lumetri.setLook`（创意 Look）、`lumetri.applyPreset`、`presets.save/apply`（自制预设跨镜复用）。
 
 **PhotoCraft 落点**：`image.adjustments.exposure/levels/curves/vibrance/desaturate`；RAW 走 `filter.cameraRaw`；批量一致性用 `actions.record → actions.save → file.automate.batch`。
+
+**打印版式（LightCraft 0.10 新增）**：`print.template.list/apply/save` + `print.cell.*` + `print.layout`——把冲洗结果按版式模板排进打印页；`slideshow.export` 直接出幻灯片。
 
 ## 二、二级校色与局部
 

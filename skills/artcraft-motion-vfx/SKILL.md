@@ -36,7 +36,7 @@ description: 动效与特效选择——何时在剪辑内做效果（FilmCraft 
 | Time | 8 | 时间重映射、残影、像素运动模糊 | 变速优先在剪辑层做 |
 | 3D Channel / Expression Controls / Matte / Text / Utility / Obsolete | 8/9/6/2/9/9 | 深度合成、表达式控制、遮罩工具 | Obsolete 类避免新项目使用 |
 
-**查询**：`artcraft_cli { bin:"effectcraft", args:["commands","--json"] }` 取全部 id；`exec app.capabilities` 看效果总数与导出格式；`effect.apply {layer, effect}` 施加；`effect.setParam` 调参。
+**查询**：`artcraft_cli { bin:"effectcraft", args:["commands","--json"] }` 取全部 id；`exec app.capabilities` 看效果总数与导出格式；`effect.apply {layer, effect}` 施加；调参用 **`prop.set`**（0.13.0 起 `effect.setParam` 已移除，属性读写统一走 `prop.get/set/toggleAnimation/addKey`，参数路径形如 `effects/#1/<param>`）。
 
 ## 三、关键帧与缓动（动效"贵不贵"就看这里）
 
