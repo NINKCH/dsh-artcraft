@@ -4,10 +4,6 @@ description: >-
   导演透镜（ArtCraft 适配版）：阿尔弗雷德·希区柯克导演风格 Skill。把该导演的工作方式翻译成 ArtCraft 可执行参数——FilmCraft 时间线与转场、LightCraft 影调分区、SoundCraft 声音规则、EffectCraft 机位。当用户点名该导演、要求该风格，或项目美学圣经引用该透镜时加载。
 ---
 
-<!-- 改编自 DirectorSKILL（MIT License）© 2026 wangzhang-wu — https://github.com/wuwangzhang1216/DirectorSKILL 。
-     依据 MIT 许可改编并随 @ninkch/dsh-artcraft 分发；新增「ArtCraft 落点」章节。
-     方法论仅用于原创创作：不得复刻真实影片的具体镜头、台词、角色或情节。 -->
-
 # 阿尔弗雷德·希区柯克导演风格 Skill（ArtCraft 适配版）
 
 ## 风格参数 / Style parameters

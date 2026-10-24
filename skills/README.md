@@ -20,7 +20,7 @@ so you know which skill to open.
 | `artcraft-film-study` | Shot-by-shot film study: 8-step method, shot-table schema, emotion-score criteria, traceable conclusions, report template | Analysing an existing film (review/research) |
 | `artcraft-batch-pipeline` | Batch and pipeline work: headless batch formats, HTTP job queue, in-app queues, proxies and cache, media health/relink, incremental and resumable runs, retries, QC hook-up | Dozens/hundreds of files, a whole season |
 | `artcraft-multicam` | Multicam: build sources, align, grid browsing, `selectCamera*` vs `cutToCamera*`, live switching, audio-follows-video, cross-camera matching, switching rhythm | Interviews, concerts, live cuts |
-| `artcraft-director-lens` | 20 director lenses (Spielberg…Wong Kar-wai, Zhang Yimou, Bi Gan…): each maps a director's working method to ArtCraft parameters — ASL targets, transition bias, light ratio, palette→mixer channels, sound rules, QC hooks. Adapted from DirectorSKILL (MIT) | "Cut/grade this like <director>", style bible references a lens |
+| `artcraft-director-lens` | 20 director lenses (Spielberg…Wong Kar-wai, Zhang Yimou, Bi Gan…): each maps a director's working method to ArtCraft parameters — ASL targets, transition bias, light ratio, palette→mixer channels, sound rules, QC hooks. | "Cut/grade this like <director>", style bible references a lens |
 
 ## Reference files (loaded with a skill)
 
