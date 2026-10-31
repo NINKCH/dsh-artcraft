@@ -12,7 +12,8 @@
     "gridcraft": "C:/Program Files/GridCraft",
     "cadcraft": "C:/Program Files/CADCraft",
     "soundcraft": "C:/Program Files/SoundCraft",
-    "figcraft": "C:/Program Files/FigCraft"
+    "figcraft": "C:/Program Files/FigCraft",
+    "solidcraft": "D:/Develop/ArtCraft/solidcraft/SolidCraft/solidcraft-cli.exe"
   },
   "control": {
     "filmcraft": 9876,

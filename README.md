@@ -14,12 +14,13 @@
 
 ## Why this exists
 
-[ArtCraft](https://getartcraft.com/apps) is a family of **thirteen** free, fair-source reinventions
+[ArtCraft](https://getartcraft.com/apps) is a family of **fourteen** free, fair-source reinventions
 of Adobe's studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop),
 **VectorCraft** (Illustrator), **FilmCraft** (Premiere Pro), **LightCraft** (Lightroom),
 **PdfCraft** (Acrobat), **EffectCraft** (After Effects), **DesignCraft** (InDesign),
 **WordCraft** (Word), **DeckCraft** (PowerPoint), **GridCraft** (Excel), **CADCraft** (AutoCAD),
-**SoundCraft** (Pro Tools) and **FigCraft** (Figma). They share one superpower that most desktop
+**SoundCraft** (Pro Tools), **FigCraft** (Figma) and **SolidCraft** (3D parametric CAD).
+They share one superpower that most desktop
 apps don't have: **every menu item, slider and dialog is a command**, and the exact same commands
 can be driven from a headless CLI, a JSON control channel, or an MCP server. The apps were built
 for agents from day one.
@@ -151,12 +152,12 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | Tool | What it does |
 |---|---|
-| `artcraft_status` | Toolchain health check: which of the 13 CLIs resolved, config location, control ports, running jobs |
+| `artcraft_status` | Toolchain health check: which of the 14 CLIs resolved, config location, control ports, running jobs |
 | `artcraft_cli` | Run any CLI subcommand synchronously (`photocraft-cli run/batch`, `wordcraft-cli convert`, …) |
 | `artcraft_control` | One command over the JSON control channel of a *running* app (filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980, or pass `port`) |
 | `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
 | `artcraft_discover` | Family install auto-discovery: fills missing paths, auto-corrects stale ones |
-| `artcraft_apps` | Capability catalog for all 13 apps: CLI subcommands, control ports, MCP, repo/docs links, plus measured command-family stats |
+| `artcraft_apps` | Capability catalog for all 14 apps: CLI subcommands, control ports, MCP, repo/docs links, plus measured command-family stats |
 | `artcraft_qc` | Delivery QC: family probe + platform-spec checks returning ok/warn/fail/manual with fix commands (video/audio/image/pdf/doc/sheet/deck/fig/cad) |
 | `artcraft_live` | Control-channel liveness: which apps are running right now (ready for live tuning) |
 | `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 14 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles, cleanup/restore, social pack, long-form clips) |
@@ -193,7 +194,7 @@ Full route list:
 | `GET /artcraft/api/file?path=…` | Download a file — streamed, up to 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | Job lifecycle with output statting and tail logs |
 | `POST /artcraft/api/control` | Synchronous control-channel call (`app` or `port`) |
-| `GET /artcraft/api/apps[?id=…]` | Family capability catalog (13 apps + command-family stats) |
+| `GET /artcraft/api/apps[?id=…]` | Family capability catalog (14 apps + command-family stats) |
 | `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | Delivery QC: platform-spec checks with fix commands |
 | `GET /artcraft/api/skills` | Bundled skill pack listing (11 skills + their reference files) |
 | `GET /artcraft/api/live[?ports=app:port,…]` | Control-channel liveness (which apps are running) |
@@ -256,7 +257,7 @@ the `media · craft · out` triad, and everything composes.
 
 | Endpoint | Use it for |
 |---|---|
-| `GET /artcraft/api/apps` | 13-app capability catalog + command-family stats (a "capabilities" panel) |
+| `GET /artcraft/api/apps` | 14-app capability catalog + command-family stats (a "capabilities" panel) |
 | `GET /artcraft/api/skills` | The 11 bundled skills with their reference files (a "skills" section) |
 | `GET /artcraft/api/live` | Control-channel liveness (live tuning vs headless runs) |
 | `GET /artcraft/api/qc?path=…&platform=…` | Artefact QC — chain it right after an export and show a PASS/WARN badge; on failure surface `checks[].fix` verbatim |

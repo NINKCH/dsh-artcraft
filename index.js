@@ -8,12 +8,12 @@
  *
  * 两种形态：
  *   1) Agent Tools（对话内直接驱动）:
- *        artcraft_status  —— 检查 13 个家族 CLI 是否可用、配置目录、控制通道配置
- *        artcraft_cli     —— 运行 13 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
+ *        artcraft_status  —— 检查 14 个家族 CLI 是否可用、配置目录、控制通道配置
+ *        artcraft_cli     —— 运行 14 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
  *        artcraft_control —— 向运行中的 FilmCraft/EffectCraft/VectorCraft/LightCraft JSON 控制通道发一条命令
  *        artcraft_fs      —— 桥接文件操作（list/stat/readtext/write/mkdir，绝对路径）
  *        artcraft_update  —— 插件自身更新（检查/应用）
- *        artcraft_apps    —— 13 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
+ *        artcraft_apps    —— 14 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
  *        artcraft_qc      —— 交付质检（家族探针 + 平台规格核对，返回 PASS/WARN/FAIL/MANUAL）
  *        artcraft_live    —— 控制通道活性探测（哪些 App 正开着，可直接边看边调）
  *
@@ -35,7 +35,7 @@
  *        GET  /artcraft/api/live       控制通道活性（?ports=app:port,… 追加）
  *
  * 安全约定：
- *   - 子进程只允许 13 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
+ *   - 子进程只允许 14 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
  *   - 控制通道只连 127.0.0.1，与 ArtCraft 官方协议一致（App 需以 --control 启动；
  *     已知默认端口：filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980；
  *     PhotoCraft 控制通道为令牌鉴权模式、PdfCraft 为文件式（--control FILE），均不代理；
@@ -61,6 +61,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BINS = [
   'photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft',
   'designcraft', 'wordcraft', 'deckcraft', 'gridcraft', 'cadcraft', 'soundcraft', 'figcraft',
+  'solidcraft',
 ];
 const PKG_NAME = '@ninkch/dsh-artcraft';
 const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877, vectorcraft: 7979, lightcraft: 7980 };
@@ -88,6 +89,7 @@ const DEFAULT_CONFIG = {
     cadcraft: 'cadcraft-cli',
     soundcraft: 'soundcraft-cli',
     figcraft: 'figcraft-cli',
+    solidcraft: 'solidcraft-cli',
   },
   control: { ...DEFAULT_PORTS },
 };
@@ -97,6 +99,7 @@ const APP_DISPLAY = {
   lightcraft: 'LightCraft', pdfcraft: 'PdfCraft', effectcraft: 'EffectCraft',
   designcraft: 'DesignCraft', wordcraft: 'WordCraft', deckcraft: 'DeckCraft',
   gridcraft: 'GridCraft', cadcraft: 'CADCraft', soundcraft: 'SoundCraft', figcraft: 'FigCraft',
+  solidcraft: 'SolidCraft',
 };
 
 /* ============================ 配置 ============================ */
@@ -516,6 +519,7 @@ const QC_KINDS = [
   { kind: 'sheet', bin: 'gridcraft', re: /\.(xlsx|xls|csv|tsv|ods)$/i, args: (p) => ['info', p, '--json'] },
   { kind: 'deck', bin: 'deckcraft', re: /\.(pptx|ppt|odp|deckcraft)$/i, args: (p) => ['info', p] },
   { kind: 'fig', bin: 'figcraft', re: /\.(figcraft|fig)$/i, args: (p) => ['info', p, '--json'] },
+  { kind: 'solidcad', bin: 'solidcraft', re: /\.(sc|step|stp)$/i, args: (p) => ['eval', p] },
   { kind: 'cad', bin: 'cadcraft', re: /\.(dxf|dwg)$/i, args: (p) => ['info', p] },
   { kind: 'design', bin: 'designcraft', re: /\.(indd|idml|icml|designcraft)$/i, args: null },
 ];
@@ -1074,7 +1078,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_status',
-      description: '检查 ArtCraft 家族 13 个 CLI 是否可用，报告配置目录、控制通道端口与任务状态。本插件只是桥接，产物路径由调用方决定。',
+      description: '检查 ArtCraft 家族 14 个 CLI 是否可用，报告配置目录、控制通道端口与任务状态。本插件只是桥接，产物路径由调用方决定。',
       schema: { type: 'object', properties: {}, additionalProperties: false },
       async execute() {
         const cfg = await loadConfig();
@@ -1084,7 +1088,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_cli',
-      description: '运行 ArtCraft 家族 CLI 的任意子命令（photocraft-cli / wordcraft-cli / figcraft-cli 等 13 个，bin 参数的 enum 即完整清单）。长渲染请改用 HTTP POST /artcraft/api/job 后台执行。',
+      description: '运行 ArtCraft 家族 CLI 的任意子命令（photocraft-cli / wordcraft-cli / figcraft-cli 等 14 个，bin 参数的 enum 即完整清单）。长渲染请改用 HTTP POST /artcraft/api/job 后台执行。',
       schema: {
         type: 'object',
         properties: {

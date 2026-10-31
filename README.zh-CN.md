@@ -15,11 +15,11 @@
 ## 为什么做这个
 
 [ArtCraft](https://getartcraft.com/apps) 是一套用纯 Rust 从零重写的免费公平源代码（fair source）
-Adobe 对标工具，共 **13 个应用**：**PhotoCraft**（Photoshop）、**VectorCraft**（Illustrator）、
+Adobe 对标工具，共 **14 个应用**：**PhotoCraft**（Photoshop）、**VectorCraft**（Illustrator）、
 **FilmCraft**（Premiere Pro）、**LightCraft**（Lightroom）、**PdfCraft**（Acrobat）、
 **EffectCraft**（After Effects）、**DesignCraft**（InDesign）、**WordCraft**（Word）、
 **DeckCraft**（PowerPoint）、**GridCraft**（Excel）、**CADCraft**（AutoCAD）、**SoundCraft**
-（Pro Tools）、**FigCraft**（Figma）。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、
+（Pro Tools）、**FigCraft**（Figma）、**SolidCraft**（三维参数化 CAD）。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、
 滑块、对话框都是一条命令**，而同一套命令既能从无头 CLI 调用，也能走 JSON 控制通道或 MCP——
 这些 App 从第一天起就是为 agent 设计的。
 
@@ -137,12 +137,12 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 
 | 工具 | 用途 |
 |---|---|
-| `artcraft_status` | 工具体检：13 个 CLI 是否找到、配置目录、控制端口、进行中的任务 |
+| `artcraft_status` | 工具体检：14 个 CLI 是否找到、配置目录、控制端口、进行中的任务 |
 | `artcraft_cli` | 同步执行任意 CLI 子命令（`photocraft-cli run/batch`、`wordcraft-cli convert` 等） |
 | `artcraft_control` | 向**运行中**的 App 控制通道发一条命令（filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980，或 port 直连） |
 | `artcraft_fs` | 桥接文件操作 —— list / stat / 读 / 写 / 建目录，路径由调用方绝对指定 |
 | `artcraft_discover` | 家族安装自动探测：填充缺失路径、自动纠正失效路径 |
-| `artcraft_apps` | 13 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 + 实测命令族统计 |
+| `artcraft_apps` | 14 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 + 实测命令族统计 |
 | `artcraft_qc` | 交付质检：家族探针 + 平台规格核对，返回 ok/warn/fail/manual 与修复命令（video/audio/image/pdf/doc/sheet/deck/fig/cad） |
 | `artcraft_live` | 控制通道活性探测：哪些 App 正开着（可直接"边看边调"） |
 | `artcraft_recipes` | 内置专家配方（8 套）**与 14 条「任务→技能→命令链」编排**（短剧成片、剧本到分镜、RAW 冲洗、拉片分析、音频后期、合成镜头、设计系统、文档交付、批量横转竖、封面包装、多语言字幕、素材清理修复、社交分包、长素材切片） |
@@ -178,7 +178,7 @@ POST /artcraft/api/job/cancel  { "id":"7f2c…" }
 | `GET /artcraft/api/file?path=…` | 下载文件 —— 流式，上限 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | 任务生命周期，含产物探测与日志尾部 |
 | `POST /artcraft/api/control` | 控制通道同步调用（`app` 或 `port`） |
-| `GET /artcraft/api/apps[?id=…]` | 家族能力目录（13 应用 + 命令族统计） |
+| `GET /artcraft/api/apps[?id=…]` | 家族能力目录（14 应用 + 命令族统计） |
 | `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | 交付质检：平台规格核对 + 修复建议 |
 | `GET /artcraft/api/skills` | 内置技能包清单（11 技能 + 各自参考文件） |
 | `GET /artcraft/api/live[?ports=app:port,…]` | 控制通道活性（哪些 App 正开着） |
@@ -237,7 +237,7 @@ EffectCraft 同族协议，端口默认 9877；VectorCraft 默认 7979、LightCr
 
 | 端点 | 用途 |
 |---|---|
-| `GET /artcraft/api/apps` | 13 应用能力目录 + 命令族统计（做"能力面板"） |
+| `GET /artcraft/api/apps` | 14 应用能力目录 + 命令族统计（做"能力面板"） |
 | `GET /artcraft/api/skills` | 内置 11 个技能清单（做"技能"区块） |
 | `GET /artcraft/api/live` | 控制通道活性（哪些 App 正开着，决定"实时调"还是"无头跑"） |
 | `GET /artcraft/api/qc?path=…&platform=…` | 产物质检（交付前自动把规格核对挂在导出流程后） |
@@ -285,7 +285,7 @@ NVENC 硬编）、ProRes、DNxHR，附 EBU R128 响度归一与字幕烧录。�
 ## 安全与信任模型
 
 HTTP 面无鉴权，挂在 Harness Web 服务之下（仅回环监听）—— 把端口当本机可信处理，**不要暴露
-到网络**；确需远程请加带鉴权的反向代理。子进程锁定 13 个白名单家族 CLI；控制通道只会拨
+到网络**；确需远程请加带鉴权的反向代理。子进程锁定 14 个白名单家族 CLI；控制通道只会拨
 `127.0.0.1`。
 
 ## 发布
