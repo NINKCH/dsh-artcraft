@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated": "2026-10-12",
+  "updated": "2026-11-10",
   "note": "v2：每套配方标注应先读的技能（skills 字段）；新增 chains —— 面向常见后期任务的『任务 → 技能 → 命令链』编排模板，命令 id 均为家族实测命令。技能包随插件分发（@ninkch/dsh-artcraft/skills）。",
   "recipes": [
     {
@@ -421,6 +421,42 @@
         { "app": "filmcraft", "cmd": "media.reconnectFullRes", "note": "导出后切回全分辨率（若还要继续剪）" }
       ],
       "verify": ["每个切片有独立开头与结尾（不留半句）", "字幕完整且与语音同步", "artcraft_qc 逐条通过", "命名规范且分批次存放"]
+    },
+    {
+      "id": "material-to-texture",
+      "title": "材质设计 → 贴图烘焙（MaterialCraft → TextureCraft 图片桥）",
+      "skills": ["artcraft-ops", "artcraft-delivery-qc"],
+      "when": "要一套 PBR 材质，并把它变成模型上的贴图集",
+      "steps": [
+        { "app": "materialcraft", "cmd": "new", "note": "new pbr base.sbs 建图；已有材质直接开 .sbs，节点 def 清单用 run base.sbs library.list" },
+        { "app": "materialcraft", "cmd": "graph.node.add", "params": { "def": "bitmap" }, "note": "def 是必填键（写 type 会报 def is required）；connectFrom 只能接 Any 端口" },
+        { "app": "materialcraft", "cmd": "graph.cook", "note": "导出前先 cook；cookMs 超过 8000 要降 export(--size) 或精简节点" },
+        { "app": "materialcraft", "cmd": "export", "note": "export base.sbs out → 6 张 PNG（basecolor/normal/roughness/metallic/height/ambientocclusion），没有 --full 选项" },
+        { "app": "materialcraft", "cmd": "file.exportMaterial", "params": { "path": "base.mcmat" }, "note": "要可移植材质包走这个（.sbs→.mcmat）；注意它写 version 2" },
+        { "app": "texturecraft", "cmd": "resource.import", "params": { "path": "<abs>/out/base_normal.png" }, "note": "run 默认不落盘，每步都要 -o tex.tcraft，否则下一步看不见这张图" },
+        { "app": "texturecraft", "cmd": "textureSet.meshMap.set", "params": { "map": "normal", "image": "base_normal.png" }, "note": "按 map 名挂图；会把纹理集分辨率拉齐到导入图尺寸" },
+        { "app": "texturecraft", "cmd": "bake", "note": "bake tex.tcraft --resolution 2048 --maps normal,height,id；ao/bent_normal/world_normal 会被拒，curvature/thickness 在 0.5.0 headless 直接崩进程" },
+        { "app": "texturecraft", "cmd": "mask.smart.apply", "params": { "name": "edge_wear" }, "note": "要磨损/脏污用 smart mask（edge_wear/edge_chipped/dirt_cavities/dust_top），别去烘 curvature" },
+        { "app": "texturecraft", "cmd": "export.plan", "note": "先列将写出的文件名/位深/警告，再正式导出" },
+        { "app": "texturecraft", "cmd": "file.exportTextures", "params": { "dir": "out", "preset": "glTF PBR Metal Roughness" }, "note": "预设见 export.presets；也可 format/bitDepth/size/colorSpace/padding" }
+      ],
+      "verify": ["纹理集分辨率 ≥ 目标平台要求", "baked.maps 覆盖需要交付的通道", "UV 无重叠、pendingTiles 为 0", "导出文件名与位深符合下游（引擎/渲染器）约定"]
+    },
+    {
+      "id": "solid-model-delivery",
+      "title": "参数化三维建模 → STEP/效果图交付（SolidCraft）",
+      "skills": ["artcraft-ops", "artcraft-delivery-qc"],
+      "when": "要做可复算的三维零件或装配，并交付 STEP/STL/效果图",
+      "steps": [
+        { "app": "solidcraft", "cmd": "run", "note": "run build.json --save built.sc --results；脚本是 [{id,params}...]，第一条一般 file.new" },
+        { "app": "solidcraft", "cmd": "solid.box", "params": { "length": 40, "width": 30, "height": 20 }, "note": "尺寸键是 length/width/height（写 depth 会报 length must be a number or an expression）" },
+        { "app": "solidcraft", "cmd": "engine.describe", "note": "拿某条命令的完整 JSON Schema（input.$defs 含 LengthExpr），比猜参数快；CLI 没有 describe 子命令" },
+        { "app": "solidcraft", "cmd": "file.export_step", "params": { "path": "box.step" }, "note": "返回 {path,bytes,format}；装配体加 bodies:[names]" },
+        { "app": "solidcraft", "cmd": "file.export_stl", "note": "打印/切片用；file.send_to_slicer 可直接送切片器" },
+        { "app": "solidcraft", "cmd": "render", "note": "render built.sc --out shot.png --timeout 120（默认参数最稳；--progressive/--samples 与 snapshot 在本机 headless 静默失败）" },
+        { "app": "solidcraft", "cmd": "eval", "note": "eval built.sc 出实体/面积/包围盒 JSON —— 与 artcraft_qc 同口径" }
+      ],
+      "verify": ["实体数与非空 body 符合预期", "STEP/STL 产物字节数 > 0 且格式正确", "参数表可复算（改一个参数能重算出新几何）", "效果图与设计意图一致（视角/光照/材质）"]
     }
   ]
 }

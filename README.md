@@ -168,7 +168,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_apps` | Capability catalog for all 17 apps: CLI subcommands, control ports, MCP, repo/docs links, plus measured command-family stats |
 | `artcraft_qc` | Delivery QC: family probe + platform-spec checks returning ok/warn/fail/manual with fix commands (video/audio/image/pdf/doc/sheet/deck/fig/cad) |
 | `artcraft_live` | Control-channel liveness: which apps are running right now (ready for live tuning) |
-| `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 14 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles, cleanup/restore, social pack, long-form clips) |
+| `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 16 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles, cleanup/restore, social pack, long-form clips, material→texture bake, SolidCraft model delivery) |
 | `artcraft_update` | The plugin's own update (check / apply) |
 
 ## Driving it from the browser

@@ -150,7 +150,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_apps` | 14 应用能力目录：每个应用的 CLI 子命令、控制端口、MCP、仓库/文档链接 + 实测命令族统计 |
 | `artcraft_qc` | 交付质检：家族探针 + 平台规格核对，返回 ok/warn/fail/manual 与修复命令（video/audio/image/pdf/doc/sheet/deck/fig/cad） |
 | `artcraft_live` | 控制通道活性探测：哪些 App 正开着（可直接"边看边调"） |
-| `artcraft_recipes` | 内置专家配方（8 套）**与 14 条「任务→技能→命令链」编排**（短剧成片、剧本到分镜、RAW 冲洗、拉片分析、音频后期、合成镜头、设计系统、文档交付、批量横转竖、封面包装、多语言字幕、素材清理修复、社交分包、长素材切片） |
+| `artcraft_recipes` | 内置专家配方（8 套）**与 16 条「任务→技能→命令链」编排**（短剧成片、剧本到分镜、RAW 冲洗、拉片分析、音频后期、合成镜头、设计系统、文档交付、批量横转竖、封面包装、多语言字幕、素材清理修复、社交分包、长素材切片、材质到贴图烘焙、SolidCraft 建模交付） |
 | `artcraft_update` | 插件自身更新（检查 / 应用） |
 
 ## 在浏览器里驱动

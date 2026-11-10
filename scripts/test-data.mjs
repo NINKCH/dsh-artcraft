@@ -137,6 +137,19 @@ for (const name of skillDirs) {
 if (skillProblems.length === 0) pass('每个技能都有 SKILL.md + name/description');
 else fail(`技能包问题：${skillProblems.join('; ')}`);
 
+// 参考文件是技能正文的落地依据：技能里引用了就必须真的存在
+const refProblems = [];
+for (const dir of skillDirs) {
+  const md = path.join(skillsDir, dir, 'SKILL.md');
+  if (!fs.existsSync(md)) continue;
+  const body = fs.readFileSync(md, 'utf8');
+  for (const rel of body.match(/references\/[A-Za-z0-9._/-]+\.md/g) ?? []) {
+    if (!fs.existsSync(path.join(skillsDir, dir, rel))) refProblems.push(`${dir}: ${rel}`);
+  }
+}
+if (refProblems.length === 0) pass('SKILL.md 引用的参考文件都存在');
+else fail(`SKILL.md 引用了不存在的参考文件：${refProblems.join(', ')}`);
+
 /* ---- 7) 配方与编排链 ---- */
 const recipes = readJson('recipes/recipes.json');
 const chains = recipes.chains ?? [];

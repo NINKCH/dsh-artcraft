@@ -27,6 +27,7 @@ so you know which skill to open.
 | File | Contents |
 |---|---|
 | `artcraft-ops/references/command-families.md` | Measured command families of all 17 apps |
+| `artcraft-ops/references/new-member-commands.md` | SolidCraft / MaterialCraft / TextureCraft / Craft Anything: every command id, parameter contract, bake-map matrix and headless gotchas (measured) |
 | `artcraft-color-light/references/develop-controls.md` | All 122 LightCraft develop controls by section |
 | `artcraft-color-light/references/lumetri-and-scopes.md` | Lumetri/LUT/scopes interface (verified) |
 | `artcraft-motion-vfx/references/effect-catalogue.md` | All 307 EffectCraft effects with `ec.*` ids |

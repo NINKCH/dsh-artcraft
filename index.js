@@ -700,7 +700,7 @@ async function runQc(cfg, { path: rawPath, platform, kind: wantKind, live: wantL
     const cookMs = num(dig(probe, ['cookMs']));
     if (cookMs !== null) {
       add('material.cook', cookMs > 8000 ? 'warn' : 'ok', `全图 cook ${Math.round(cookMs)} ms`,
-        cookMs > 8000 ? '烘焙偏慢：降 --size 或减少 history-heavy 节点；交付前用 export --full 复核' : undefined);
+        cookMs > 8000 ? '烘焙偏慢：降 --size 或减少 history-heavy 节点；交付前用 file.exportMaterial 复核输出通道' : undefined);
     }
     const warns = dig(probe, ['package', 'warnings']);
     if (Array.isArray(warns)) {
@@ -721,7 +721,7 @@ async function runQc(cfg, { path: rawPath, platform, kind: wantKind, live: wantL
         res < 1024 ? '交付贴图建议 ≥ 1024（4K 资产用 2048/4096）：bake --resolution 2048' : undefined);
       const unbaked = sets.filter((s) => !s?.baked).length;
       add('texture.baked', unbaked === 0 ? 'ok' : 'warn', unbaked === 0 ? '每个纹理集都已烘焙网格贴图' : `${unbaked} 个纹理集未烘焙网格贴图`,
-        unbaked ? 'bake <project> --resolution 2048 --maps ao,normal,curvature（曲面/法线/环境光遮蔽烘焙前先确认 UV）' : undefined);
+        unbaked ? 'bake <project> --resolution 2048 --maps normal,height,id（ao/bent_normal/world_normal 会被拒，curvature/thickness 在 0.5.0 headless 直接崩进程；烘焙前先确认 UV 无重叠）' : undefined);
       const layers = sets.reduce((n, s) => n + (Number(s?.layers) || 0), 0);
       add('texture.layers', layers > 0 ? 'ok' : 'warn', `${layers} 个绘画层`,
         layers ? undefined : '空工程只有底色；先材质填充再导出，否则贴图无内容');
@@ -1334,7 +1334,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_recipes',
-      description: '内置专家处理方案库（v2）：8 套专业配方（短剧海报、分镜批量调色、横转竖、响度标准化、字幕生成与烧录、动态片头、多平台分发包、先探测后验证纪律）+ 14 条「任务 → 技能 → 命令链」编排模板（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付、文档交付、批量横转竖、封面缩略图、多语言字幕、素材清理修复、社交分发包、长素材切片）。action=list 列配方；action=get + id 取配方详情；action=chains 列编排链；action=chain + id 取完整命令链。配方中的 skills 字段指名应先读的技能包。',
+      description: '内置专家处理方案库（v2）：8 套专业配方（短剧海报、分镜批量调色、横转竖、响度标准化、字幕生成与烧录、动态片头、多平台分发包、先探测后验证纪律）+ 16 条「任务 → 技能 → 命令链」编排模板（竖屏短剧成片、剧本到分镜、RAW 批量冲洗、拉片分析、音频后期、合成镜头、设计系统交付、文档交付、批量横转竖、封面缩略图、多语言字幕、素材清理修复、社交分发包、长素材切片、材质到贴图烘焙、SolidCraft 建模交付）。action=list 列配方；action=get + id 取配方详情；action=chains 列编排链；action=chain + id 取完整命令链。配方中的 skills 字段指名应先读的技能包。',
       schema: {
         type: 'object',
         properties: {

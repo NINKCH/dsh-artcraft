@@ -7,6 +7,8 @@ description: ArtCraft 家族 17 个应用的调用基本功——用哪个成员
 
 ArtCraft 是 17 个同源桌面应用的家族，**每个菜单项、滑块、对话框都是一条命令**；同一套命令既能从无头 CLI 调用，也能走运行中应用的 JSON 控制通道。本技能教你"怎么调得顺"，不涉及创作判断（创作判断见 artcraft-shot-language / edit-rhythm / color-light / sound-design / motion-vfx / delivery-qc）。
 
+配套参考：`references/command-families.md`（17 成员命令族总表）· `references/new-member-commands.md`（SolidCraft / MaterialCraft / TextureCraft / Craft Anything 的**逐条命令 id、参数契约与 headless 实测坑**——要抄具体命令时看这个）。
+
 ## 一、成员职责矩阵（先选对人）
 
 | 需求 | 成员 | 关键命令族 |
