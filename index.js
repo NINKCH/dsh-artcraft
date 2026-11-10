@@ -8,12 +8,12 @@
  *
  * 两种形态：
  *   1) Agent Tools（对话内直接驱动）:
- *        artcraft_status  —— 检查 14 个家族 CLI 是否可用、配置目录、控制通道配置
- *        artcraft_cli     —— 运行 14 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
+ *        artcraft_status  —— 检查 17 个家族 CLI 是否可用、配置目录、控制通道配置
+ *        artcraft_cli     —— 运行 17 个家族 CLI 任意命令（cwd / 文件参数由调用方给绝对路径）
  *        artcraft_control —— 向运行中的 FilmCraft/EffectCraft/VectorCraft/LightCraft JSON 控制通道发一条命令
  *        artcraft_fs      —— 桥接文件操作（list/stat/readtext/write/mkdir，绝对路径）
  *        artcraft_update  —— 插件自身更新（检查/应用）
- *        artcraft_apps    —— 14 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
+ *        artcraft_apps    —— 17 个家族应用的自动化能力目录（子命令/控制端口/MCP/仓库）
  *        artcraft_qc      —— 交付质检（家族探针 + 平台规格核对，返回 PASS/WARN/FAIL/MANUAL）
  *        artcraft_live    —— 控制通道活性探测（哪些 App 正开着，可直接边看边调）
  *
@@ -35,7 +35,7 @@
  *        GET  /artcraft/api/live       控制通道活性（?ports=app:port,… 追加）
  *
  * 安全约定：
- *   - 子进程只允许 14 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
+ *   - 子进程只允许 17 个白名单键（家族 CLI），具体可执行文件由 artcraft.config.json 指定；
  *   - 控制通道只连 127.0.0.1，与 ArtCraft 官方协议一致（App 需以 --control 启动；
  *     已知默认端口：filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980；
  *     PhotoCraft 控制通道为令牌鉴权模式、PdfCraft 为文件式（--control FILE），均不代理；
@@ -61,7 +61,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BINS = [
   'photocraft', 'vectorcraft', 'filmcraft', 'lightcraft', 'pdfcraft', 'effectcraft',
   'designcraft', 'wordcraft', 'deckcraft', 'gridcraft', 'cadcraft', 'soundcraft', 'figcraft',
-  'solidcraft',
+  'solidcraft', 'materialcraft', 'texturecraft', 'craftanything',
 ];
 const PKG_NAME = '@ninkch/dsh-artcraft';
 const DEFAULT_PORTS = { filmcraft: 9876, effectcraft: 9877, vectorcraft: 7979, lightcraft: 7980 };
@@ -90,6 +90,9 @@ const DEFAULT_CONFIG = {
     soundcraft: 'soundcraft-cli',
     figcraft: 'figcraft-cli',
     solidcraft: 'solidcraft-cli',
+    materialcraft: 'materialcraft-cli',
+    texturecraft: 'texturecraft-cli',
+    craftanything: 'craft-anything-cli',
   },
   control: { ...DEFAULT_PORTS },
 };
@@ -99,7 +102,8 @@ const APP_DISPLAY = {
   lightcraft: 'LightCraft', pdfcraft: 'PdfCraft', effectcraft: 'EffectCraft',
   designcraft: 'DesignCraft', wordcraft: 'WordCraft', deckcraft: 'DeckCraft',
   gridcraft: 'GridCraft', cadcraft: 'CADCraft', soundcraft: 'SoundCraft', figcraft: 'FigCraft',
-  solidcraft: 'SolidCraft',
+  solidcraft: 'SolidCraft', materialcraft: 'MaterialCraft', texturecraft: 'TextureCraft',
+  craftanything: 'Craft Anything',
 };
 
 /* ============================ 配置 ============================ */
@@ -108,6 +112,7 @@ async function loadConfig() {
   const cfg = {
     bins: { ...DEFAULT_CONFIG.bins },
     control: { ...DEFAULT_PORTS },
+    roots: [], // 额外安装根目录（可用配置 roots / 环境变量 ARTCRAFT_ROOTS 指定）
     configPath: null, // 实际生效的配置文件（供界面显示"配置目录"）
     autoDiscovered: false, // 首次运行是否由自动探测生成了配置
   };
@@ -130,6 +135,9 @@ async function loadConfig() {
           if (Number.isInteger(p) && p > 0 && p < 65536) cfg.control[k] = p;
         }
       }
+      if (user && Array.isArray(user.roots)) {
+        cfg.roots = user.roots.filter((r) => typeof r === 'string' && r.trim()).map((r) => r.trim());
+      }
       cfg.configPath = candidate;
       break; // 第一个可解析的配置生效
     } catch { /* 该候选不存在/非法 → 试下一个 */ }
@@ -137,7 +145,7 @@ async function loadConfig() {
   // 首次运行（没有任何配置文件）：自动探测本机家族软件安装位置并生成持久配置
   if (!cfg.configPath) {
     try {
-      const found = await discoverBinPaths();
+      const found = await discoverBinPaths(cfg.roots);
       const target = path.join(os.homedir(), '.dsh', 'artcraft.config.json');
       await fs.mkdir(path.dirname(target), { recursive: true });
       await fs.writeFile(target, JSON.stringify({ bins: { ...cfg.bins, ...found }, control: { ...cfg.control } }, null, 2) + '\n');
@@ -149,25 +157,58 @@ async function loadConfig() {
   return cfg;
 }
 
-/** 自动探测：扫描常见安装位置（Program Files 等）里的家族 CLI */
-async function discoverBinPaths() {
+/**
+ * 自动探测：扫描常见安装位置里的家族 CLI。
+ *
+ * 探测顺序（先精确后兜底）：
+ *   1) 配置 roots[] / 环境变量 ARTCRAFT_ROOTS —— 装在自定义盘符/目录时的唯一可靠判据
+ *      （例如整族装到 D:\Develop\ArtCraft\<Name>\，Program Files 里一个都没有）
+ *   2) 平台默认安装根：Windows = Program Files / Program Files (x86) / LocalAppData\Programs；
+ *      macOS = /Applications；Linux = /opt /usr/local/bin /usr/bin
+ * 每个根下按 <root>/<Name>/<cli>、<root>/<name>/<Name>/<cli>（两层）两种布局找。
+ */
+async function discoverBinPaths(extraRoots = []) {
   const isWin = process.platform === 'win32';
-  const pf = process.env['ProgramFiles'] || (isWin ? 'C:\\Program Files' : '/usr/local/bin');
-  const pf86 = process.env['ProgramFiles(x86)'] || '';
-  const lap = process.env['LOCALAPPDATA']
-    ? path.join(process.env['LOCALAPPDATA'], 'Programs')
-    : path.join(os.homedir(), '.local');
-  const roots = [pf, ...(pf86 ? [pf86] : []), lap];
+  const envRoots = String(process.env['ARTCRAFT_ROOTS'] ?? '')
+    .split(isWin ? ';' : ':')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const defaults = isWin
+    ? [
+        process.env['ProgramFiles'] || 'C:\\Program Files',
+        process.env['ProgramFiles(x86)'] || '',
+        process.env['LOCALAPPDATA'] ? path.join(process.env['LOCALAPPDATA'], 'Programs') : '',
+      ]
+    : process.platform === 'darwin'
+      ? ['/Applications']
+      : ['/opt', '/usr/local/bin', '/usr/bin'];
+
+  const roots = [...extraRoots, ...envRoots, ...defaults].filter(Boolean);
+  const seenRoot = new Set();
   const found = {};
+
   for (const key of BINS) {
     const cliName = cliNameFor(key);
-    const names = [APP_DISPLAY[key], key, key.toUpperCase(), key.toLowerCase()];
+    const dirName = APP_DISPLAY[key];
+    const names = [...new Set([dirName, key, key.toUpperCase(), key.toLowerCase(), dirName.replace(/\s+/g, '')])];
     outer: for (const root of roots) {
-      for (const name of names) {
-        const exe = path.join(root, name, cliName);
-        try {
-          if ((await fs.stat(exe)).isFile()) { found[key] = path.join(root, name); break outer; }
-        } catch { /* 继续 */ }
+      if (!seenRoot.has(root + '\u0000' + key)) {
+        for (const name of names) {
+          const exe = path.join(root, name, cliName);
+          try {
+            if ((await fs.stat(exe)).isFile()) { found[key] = path.join(root, name); break outer; }
+          } catch { /* 继续 */ }
+          // 两层布局：<root>/<pkg 目录>/<Name>/<cli>（SolidCraft 等按包名分目录安装）
+          let subs = [];
+          try { subs = await fs.readdir(root, { withFileTypes: true }); } catch { /* 根不存在 */ }
+          for (const sub of subs) {
+            if (!sub.isDirectory()) continue;
+            const exe2 = path.join(root, sub.name, name, cliName);
+            try {
+              if ((await fs.stat(exe2)).isFile()) { found[key] = path.join(root, sub.name, name); break outer; }
+            } catch { /* 继续 */ }
+          }
+        }
       }
     }
   }
@@ -210,8 +251,12 @@ async function ensureDir(p) {
   return abs;
 }
 
+/** 少数成员的 CLI 文件名不带家族前缀规则（Craft Anything 装的是 craft-anything-cli） */
+const CLI_BASENAMES = { craftanything: 'craft-anything-cli' };
+
 function cliNameFor(key) {
-  return process.platform === 'win32' ? `${key}-cli.exe` : `${key}-cli`;
+  const base = CLI_BASENAMES[key] ?? `${key}-cli`;
+  return process.platform === 'win32' ? `${base}.exe` : base;
 }
 
 /** 配置值三种形态：完整 exe 路径 / 目录（自动拼 <key>-cli[.exe]）/ 裸命令名（搜 PATH） */
@@ -520,6 +565,8 @@ const QC_KINDS = [
   { kind: 'deck', bin: 'deckcraft', re: /\.(pptx|ppt|odp|deckcraft)$/i, args: (p) => ['info', p] },
   { kind: 'fig', bin: 'figcraft', re: /\.(figcraft|fig)$/i, args: (p) => ['info', p, '--json'] },
   { kind: 'solidcad', bin: 'solidcraft', re: /\.(sc|step|stp)$/i, args: (p) => ['eval', p] },
+  { kind: 'material', bin: 'materialcraft', re: /\.sbs$/i, args: (p) => ['info', p] },
+  { kind: 'texture', bin: 'texturecraft', re: /\.tcraft$/i, args: (p) => ['info', p] },
   { kind: 'cad', bin: 'cadcraft', re: /\.(dxf|dwg)$/i, args: (p) => ['info', p] },
   { kind: 'design', bin: 'designcraft', re: /\.(indd|idml|icml|designcraft)$/i, args: null },
 ];
@@ -641,6 +688,50 @@ async function runQc(cfg, { path: rawPath, platform, kind: wantKind, live: wantL
     if (depth) add('image.depth', 'ok', `${depth} bit/通道`);
     if (spec && !spec.audioOnly && w && h && (spec.width !== w || spec.height !== h)) {
       add('platform.resolution', 'warn', `${w}×${h} ≠ 目标 ${spec.width}×${spec.height}`, '按目标画幅导出');
+    }
+  }
+
+  if (probe && k.kind === 'material') {
+    const graphs = Array.isArray(probe.graphs) ? probe.graphs : [];
+    const docs = Array.isArray(probe.documents) ? probe.documents : [];
+    const nodes = graphs.reduce((n, g) => n + (Number(g?.nodes) || 0), 0);
+    add('material.graphs', graphs.length ? 'ok' : 'warn', `${graphs.length} 个材质图 / ${nodes} 个节点（包内 ${docs.length} 个文档）`,
+      graphs.length ? undefined : '在 MaterialCraft 里新建 pbr 模板图：materialcraft-cli new pbr out.sbs');
+    const cookMs = num(dig(probe, ['cookMs']));
+    if (cookMs !== null) {
+      add('material.cook', cookMs > 8000 ? 'warn' : 'ok', `全图 cook ${Math.round(cookMs)} ms`,
+        cookMs > 8000 ? '烘焙偏慢：降 --size 或减少 history-heavy 节点；交付前用 export --full 复核' : undefined);
+    }
+    const warns = dig(probe, ['package', 'warnings']);
+    if (Array.isArray(warns)) {
+      add('material.warnings', warns.length ? 'warn' : 'ok',
+        warns.length ? `${warns.length} 条包警告：${warns.slice(0, 3).map((w) => String(w?.message ?? w)).join('；')}` : '包内无警告');
+    }
+    const outputs = graphs.flatMap((g) => (Array.isArray(g?.outputs) ? g.outputs : []));
+    if (outputs.length) add('material.outputs', 'ok', `${outputs.length} 个输出通道：${outputs.slice(0, 6).map((o) => o?.name ?? o).join(' / ')}`);
+  }
+
+  if (probe && k.kind === 'texture') {
+    const sets = Array.isArray(probe.textureSets) ? probe.textureSets : [];
+    add('texture.sets', sets.length ? 'ok' : 'warn', `${sets.length} 个纹理集`,
+      sets.length ? undefined : '新建工程：texturecraft-cli new builtin:material_ball out.tcraft --sample');
+    if (sets.length) {
+      const res = Math.max(...sets.map((s) => Number(s?.resolution) || 0));
+      add('texture.resolution', res >= 1024 ? 'ok' : 'warn', `最大分辨率 ${res} px`,
+        res < 1024 ? '交付贴图建议 ≥ 1024（4K 资产用 2048/4096）：bake --resolution 2048' : undefined);
+      const unbaked = sets.filter((s) => !s?.baked).length;
+      add('texture.baked', unbaked === 0 ? 'ok' : 'warn', unbaked === 0 ? '每个纹理集都已烘焙网格贴图' : `${unbaked} 个纹理集未烘焙网格贴图`,
+        unbaked ? 'bake <project> --resolution 2048 --maps ao,normal,curvature（曲面/法线/环境光遮蔽烘焙前先确认 UV）' : undefined);
+      const layers = sets.reduce((n, s) => n + (Number(s?.layers) || 0), 0);
+      add('texture.layers', layers > 0 ? 'ok' : 'warn', `${layers} 个绘画层`,
+        layers ? undefined : '空工程只有底色；先材质填充再导出，否则贴图无内容');
+    }
+    const uv = probe.uv;
+    if (uv) {
+      const overlaps = num(dig(uv, ['overlaps', 'overlapCount']));
+      const util = num(dig(uv, ['coverage', 'usage', 'uvCoverage']));
+      if (overlaps !== null) add('texture.uv', overlaps > 0 ? 'warn' : 'ok', overlaps > 0 ? `UV 有 ${overlaps} 处重叠` : 'UV 无重叠', overlaps > 0 ? '重叠会让烘焙串色：在 DCC 里重排 UV 岛' : undefined);
+      if (util !== null) add('texture.uvCoverage', 'ok', `UV 覆盖率 ${(util * 100).toFixed(1)}%`);
     }
   }
 
@@ -1044,8 +1135,11 @@ async function updateApply() {
 const toolNames = [];
 const toolErrors = [];
 
-/** 单测钩子：只暴露纯函数，不改运行时行为（scripts/test-fs-paths.mjs 使用） */
-export const __testables = { resolveCallerPath, resolveBaseRel, statOutputs };
+/** 单测/运维钩子：只暴露纯函数与解析器，不改运行时行为（scripts/test-fs-paths.mjs、scripts/harvest-commands.mjs 使用） */
+export const __testables = {
+  resolveCallerPath, resolveBaseRel, statOutputs, loadConfig, discoverBinPaths, resolveBin,
+  BINS, APP_DISPLAY, cliNameFor,
+};
 
 export const inject = ['tools', 'webServer'];
 
@@ -1078,7 +1172,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_status',
-      description: '检查 ArtCraft 家族 14 个 CLI 是否可用，报告配置目录、控制通道端口与任务状态。本插件只是桥接，产物路径由调用方决定。',
+      description: '检查 ArtCraft 家族 17 个 CLI 是否可用，报告配置目录、控制通道端口与任务状态。本插件只是桥接，产物路径由调用方决定。',
       schema: { type: 'object', properties: {}, additionalProperties: false },
       async execute() {
         const cfg = await loadConfig();
@@ -1088,7 +1182,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_cli',
-      description: '运行 ArtCraft 家族 CLI 的任意子命令（photocraft-cli / wordcraft-cli / figcraft-cli 等 14 个，bin 参数的 enum 即完整清单）。长渲染请改用 HTTP POST /artcraft/api/job 后台执行。',
+      description: '运行 ArtCraft 家族 CLI 的任意子命令（photocraft-cli / wordcraft-cli / figcraft-cli 等 17 个，bin 参数的 enum 即完整清单）。长渲染请改用 HTTP POST /artcraft/api/job 后台执行。',
       schema: {
         type: 'object',
         properties: {
@@ -1211,11 +1305,11 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_discover',
-      description: '自动探测本机 ArtCraft 家族软件安装位置（Program Files / LocalAppData\\Programs 等），写入/修复配置：填充默认空缺项，并自动纠正已失效的路径（改安装目录、卸载重装到别处）；用户显式配置仍有效则不动。',
+      description: '自动探测本机 ArtCraft 家族软件安装位置（配置 roots[]、环境变量 ARTCRAFT_ROOTS、Program Files / LocalAppData\\Programs / /Applications 等），写入/修复配置：填充默认空缺项，并自动纠正已失效的路径（改安装目录、卸载重装到别处）；用户显式配置仍有效则不动。',
       schema: { type: 'object', properties: {}, additionalProperties: false },
       async execute() {
         const cfg = await loadConfig();
-        const found = await discoverBinPaths();
+        const found = await discoverBinPaths(cfg.roots);
         const applied = {};
         for (const k of BINS) {
           if (!found[k]) continue;
@@ -1312,7 +1406,7 @@ export function apply(ctx) {
 
     attempt({
       name: 'artcraft_qc',
-      description: '交付质检（确定性规则）：对产物跑家族探针并按平台规格核对，返回 PASS/WARN/FAIL/MANUAL 清单与修复命令。支持 video/audio/image/pdf/doc/sheet/deck/fig/cad。用法：path=产物绝对路径；platform 可选（bilibili|youtube|douyin|reels|shorts|wechat|broadcast|podcast）核对画幅/帧率/响度目标；kind 可选，强制指定类型；live 默认 true——若检测到运行中的 App，会额外取示波器读数（filmcraft scopes.read）、Essential Sound 体检、字幕长度与 EffectCraft 能力表（结果在 appChecks）。只报事实与实测值，判定留给调用方。',
+      description: '交付质检（确定性规则）：对产物跑家族探针并按平台规格核对，返回 PASS/WARN/FAIL/MANUAL 清单与修复命令。支持 video/audio/image/pdf/doc/sheet/deck/fig/cad/solidcad/material/texture。用法：path=产物绝对路径；platform 可选（bilibili|youtube|douyin|reels|shorts|wechat|broadcast|podcast）核对画幅/帧率/响度目标；kind 可选，强制指定类型；live 默认 true——若检测到运行中的 App，会额外取示波器读数（filmcraft scopes.read）、Essential Sound 体检、字幕长度与 EffectCraft 能力表（结果在 appChecks）。只报事实与实测值，判定留给调用方。',
       output: {
         schema: { type: 'object', additionalProperties: true },
         render: (_args, v) => {
@@ -1524,7 +1618,7 @@ export function apply(ctx) {
       makeRoute(`/${NAME}/api/discover`, async (req, res) => {
         if (req.method !== 'POST') throw new Error('仅支持 POST');
         const cfg = await loadConfig();
-        const found = await discoverBinPaths();
+        const found = await discoverBinPaths(cfg.roots);
         // 只填充默认空缺项；显式配置仅在已失效（改安装目录/卸载重装）时自动纠正，有效则不动
         const applied = {};
         for (const k of BINS) {

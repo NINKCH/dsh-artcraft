@@ -14,12 +14,15 @@
 
 ## Why this exists
 
-[ArtCraft](https://getartcraft.com/apps) is a family of **fourteen** free, fair-source reinventions
-of Adobe's studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop),
+[ArtCraft](https://getartcraft.com/apps) is a family of **seventeen** free, fair-source reinventions
+of studio tools, written from scratch in pure Rust: **PhotoCraft** (Photoshop),
 **VectorCraft** (Illustrator), **FilmCraft** (Premiere Pro), **LightCraft** (Lightroom),
 **PdfCraft** (Acrobat), **EffectCraft** (After Effects), **DesignCraft** (InDesign),
 **WordCraft** (Word), **DeckCraft** (PowerPoint), **GridCraft** (Excel), **CADCraft** (AutoCAD),
-**SoundCraft** (Pro Tools), **FigCraft** (Figma) and **SolidCraft** (3D parametric CAD).
+**SoundCraft** (Pro Tools), **FigCraft** (Figma), **SolidCraft** (3D parametric CAD),
+**MaterialCraft** (Substance Designer — node-based materials), **TextureCraft**
+(Substance Painter — 3D texture painting and baking) and **Craft Anything**
+(a software research and rebuild tool, not a creation app).
 They share one superpower that most desktop
 apps don't have: **every menu item, slider and dialog is a command**, and the exact same commands
 can be driven from a headless CLI, a JSON control channel, or an MCP server. The apps were built
@@ -31,12 +34,13 @@ not just talk about them:
 - **In chat** — ten agent tools let any Harness session check the toolchain, run CLI commands,
   send control-channel commands to a running app, do bridged file operations, run delivery QC,
   and consult a per-app capability catalog.
-- **A bundled craft skill pack** — eleven skills (`artcraft-ops`, `artcraft-shot-language`,
+- **A bundled craft skill pack** — twelve skills (`artcraft-ops`, `artcraft-shot-language`,
   `artcraft-edit-rhythm`, `artcraft-color-light`, `artcraft-sound-design`, `artcraft-motion-vfx`,
   `artcraft-delivery-qc`, `artcraft-style-bible`, `artcraft-film-study`, `artcraft-batch-pipeline`,
-  `artcraft-multicam`) teach the agent *how* to drive the suite fluently, which effect to reach for,
-  how to design shot language, pacing, grade and sound, how to lock a consistent look across
-  episodes, how to break a film down into evidence, how to run batches, and how to cut multicam.
+  `artcraft-multicam`, `artcraft-director-lens`) teach the agent *how* to drive the suite fluently,
+  which effect to reach for, how to design shot language, pacing, grade and sound, how to lock a
+  consistent look across episodes, how to break a film down into evidence, how to run batches, how
+  to cut multicam, and how to work inside one director's visual grammar.
   They ship inside the plugin and load on demand (English index: `skills/README.md`).
 - **In the browser** — a same-origin HTTP API (`/artcraft/api/*`) that any Harness web UI can call,
   no CORS, no keys. It was built for [无限画布 / infinite-canvas](../dsh-infinite_canvas/README.md),
@@ -79,7 +83,11 @@ Everything runs locally. No cloud round-trips, no accounts, no telemetry.
 - **ArtCraft apps** — grab what you need from [getartcraft.com](https://getartcraft.com/apps)
   or the [storytold GitHub releases](https://github.com/storytold). The portable/installer builds
   ship the CLI binaries on Windows and Linux (`photocraft-cli.exe` …); macOS ships them as a
-  separate notarized zip. Versions tested: PhotoCraft 0.9, FilmCraft 0.8, EffectCraft (early).
+  separate notarized zip. Version tested against 2026-11 releases: PhotoCraft 0.22,
+  VectorCraft 0.23, FilmCraft 0.19, LightCraft 0.20, PdfCraft 0.20, EffectCraft 0.23.1,
+  DesignCraft 0.19, WordCraft 0.17, DeckCraft 0.17, GridCraft 0.18, CADCraft 0.19,
+  SoundCraft 0.19, FigCraft 0.17, SolidCraft 0.30.1, MaterialCraft 0.3,
+  TextureCraft 0.5, Craft Anything 0.6.
 - Nothing else. No Python, no FFmpeg — the ArtCraft apps bring their own codecs.
 
 ## Setup
@@ -157,7 +165,7 @@ artcraft_cli  { bin:"photocraft", args:["batch","--actions","demo/craft/grade.js
 | `artcraft_control` | One command over the JSON control channel of a *running* app (filmcraft 9876 / effectcraft 9877 / vectorcraft 7979 / lightcraft 7980, or pass `port`) |
 | `artcraft_fs` | Bridged file ops — list / stat / read / write / mkdir at caller-decided absolute paths |
 | `artcraft_discover` | Family install auto-discovery: fills missing paths, auto-corrects stale ones |
-| `artcraft_apps` | Capability catalog for all 14 apps: CLI subcommands, control ports, MCP, repo/docs links, plus measured command-family stats |
+| `artcraft_apps` | Capability catalog for all 17 apps: CLI subcommands, control ports, MCP, repo/docs links, plus measured command-family stats |
 | `artcraft_qc` | Delivery QC: family probe + platform-spec checks returning ok/warn/fail/manual with fix commands (video/audio/image/pdf/doc/sheet/deck/fig/cad) |
 | `artcraft_live` | Control-channel liveness: which apps are running right now (ready for live tuning) |
 | `artcraft_recipes` | Built-in expert recipes (8 workflows) **and 14 task→skill→command chains** (short-drama episode, script→storyboard, RAW batch, film study, audio post, composite shot, design system, document delivery, batch vertical reframe, cover/thumbnail pack, multilingual subtitles, cleanup/restore, social pack, long-form clips) |
@@ -194,7 +202,7 @@ Full route list:
 | `GET /artcraft/api/file?path=…` | Download a file — streamed, up to 2 GB |
 | `POST /artcraft/api/job` · `GET ?id=…` · `POST /artcraft/api/job/cancel` | Job lifecycle with output statting and tail logs |
 | `POST /artcraft/api/control` | Synchronous control-channel call (`app` or `port`) |
-| `GET /artcraft/api/apps[?id=…]` | Family capability catalog (14 apps + command-family stats) |
+| `GET /artcraft/api/apps[?id=…]` | Family capability catalog (17 apps + command-family stats) |
 | `GET /artcraft/api/qc?path=…[&platform=…][&kind=…]` | Delivery QC: platform-spec checks with fix commands |
 | `GET /artcraft/api/skills` | Bundled skill pack listing (11 skills + their reference files) |
 | `GET /artcraft/api/live[?ports=app:port,…]` | Control-channel liveness (which apps are running) |
@@ -302,11 +310,26 @@ a web UI.
 - **"需要绝对路径" errors** — pass absolute paths (chat: the conversation workspace; canvas: the
   project folder), or a `base` absolute directory + relative `rel`.
 
+## Maintaining the capability data
+
+The per-app command counts and the command-family reference are measured, not copied from
+upstream docs. After a family update, re-measure all members in one pass:
+
+```bash
+node scripts/harvest-commands.mjs --out harvest.json --diff prev-harvest.json
+```
+
+It resolves every CLI through the same config the plugin uses (`bins` / `roots[]` /
+`ARTCRAFT_ROOTS`), prints one line per member (count, source, mode, version) and lists the
+command ids that appeared or disappeared versus the previous harvest. `npm test` covers the
+parts that must stay consistent between `index.js`, `client.js`, `apps/catalog.json`, the config
+example and the bundled skills.
+
 ## Security & trust model
 
 The HTTP surface has **no authentication** and rides on the Harness web server, which listens on
 loopback only — treat the port as trusted-local and don't expose it to a network; put a reverse
-proxy with auth in front if you must. Child processes are locked to the thirteen allow-listed
+proxy with auth in front if you must. Child processes are locked to the seventeen allow-listed
 family CLIs; the control channel only ever dials `127.0.0.1`.
 
 ## Publishing

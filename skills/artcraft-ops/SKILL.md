@@ -1,11 +1,11 @@
 ---
 name: artcraft-ops
-description: ArtCraft 家族 13 个应用的调用基本功——用哪个成员、走哪条通道（无头 CLI / 控制通道 / HTTP 任务）、怎么自发现命令与前置条件、怎么探-改-验、长任务与批量怎么编排。任何要驱动 ArtCraft 家族完成视频/图像/音频/文档后期的任务，先读本技能再动手。
+description: ArtCraft 家族 17 个应用的调用基本功——用哪个成员、走哪条通道（无头 CLI / 控制通道 / HTTP 任务）、怎么自发现命令与前置条件、怎么探-改-验、长任务与批量怎么编排。任何要驱动 ArtCraft 家族完成视频/图像/音频/文档后期的任务，先读本技能再动手。
 ---
 
 # ArtCraft 家族调用基本功
 
-ArtCraft 是 13 个同源桌面应用的家族，**每个菜单项、滑块、对话框都是一条命令**；同一套命令既能从无头 CLI 调用，也能走运行中应用的 JSON 控制通道。本技能教你"怎么调得顺"，不涉及创作判断（创作判断见 artcraft-shot-language / edit-rhythm / color-light / sound-design / motion-vfx / delivery-qc）。
+ArtCraft 是 17 个同源桌面应用的家族，**每个菜单项、滑块、对话框都是一条命令**；同一套命令既能从无头 CLI 调用，也能走运行中应用的 JSON 控制通道。本技能教你"怎么调得顺"，不涉及创作判断（创作判断见 artcraft-shot-language / edit-rhythm / color-light / sound-design / motion-vfx / delivery-qc）。
 
 ## 一、成员职责矩阵（先选对人）
 
@@ -24,8 +24,12 @@ ArtCraft 是 13 个同源桌面应用的家族，**每个菜单项、滑块、�
 | 制图、标注、图纸布局 | **CADCraft** | `arc.*` `circle.*` `dimstyle.*` `layout.*` `vports.*` `blocks.*` |
 | 音频录制/编辑/混音/母带 | **SoundCraft** | `mix.*` `automation.*` `track.*` `event.*` `file.bounce_*` |
 | UI/设计系统、原型、Dev 交付 | **FigCraft** | `component.*` `instance.*` `variable.*` `style.*` `proto.*` `inspect.*` |
+| 参数化三维建模、装配、钣金、出图 | **SolidCraft** | `sketch.*` `solid.*` `construct.*` `surface.*` `joint.*` `sheet.*` `render.*` |
+| 节点式材质设计（PBR 材质图 → 贴图） | **MaterialCraft** | `graph.*`（61，建图/连线/输出） `nodes`（29 节点） `cook` `export` `render` |
+| 3D 纹理绘制、网格贴图烘焙、UDIM | **TextureCraft** | `layer.*` `mask.*` `textureSet.*` `bake.*` `material.*` `export.*` |
+| 软件研究 / 逆向 / 重建（**非创作**） | **Craft Anything** | `triage` `capabilities` `commands`(322 工具) `report` `rebuild` |
 
-跨界组合是常态：**剪辑在 FilmCraft，合成元素在 EffectCraft，影调可走 LightCraft，声音在 SoundCraft，分镜图文用 DeckCraft/DesignCraft/FigCraft，数据用 GridCraft**。
+跨界组合是常态：**剪辑在 FilmCraft，合成元素在 EffectCraft，影调可走 LightCraft，声音在 SoundCraft，分镜图文用 DeckCraft/DesignCraft/FigCraft，数据用 GridCraft；材质与贴图走 MaterialCraft → TextureCraft → FilmCraft/EffectCraft 的 3D 图层；三维形体在 SolidCraft，二维图纸在 CADCraft**。
 
 ## 二、三条通道怎么选（最关键的一步）
 
@@ -89,7 +93,7 @@ ArtCraft 是 13 个同源桌面应用的家族，**每个菜单项、滑块、�
 
 - 路径由调用方决定，**必须绝对路径**；对话调用落在当前工作空间，画布调用落在项目目录。
 - 推荐三件套布局：`media/`（素材）· `craft/`（工程文件与中间产物）· `out/`（成片与交付物）。
-- 工程文件随成员而异：`.pcraft`（PhotoCraft）· `.fcproj`（FilmCraft）· `.ecproj`（EffectCraft）· `.scraft`（SoundCraft）· `.figcraft`（FigCraft）· `.mlt` 类交换走 FilmCraft `file.exportInterchange`。
+- 工程文件随成员而异：`.pcraft`（PhotoCraft）· `.fcproj`（FilmCraft）· `.ecproj`（EffectCraft）· `.scraft`（SoundCraft）· `.figcraft`（FigCraft）· `.sc`（SolidCraft）· `.sbs`（MaterialCraft）· `.tcraft`（TextureCraft）· `.cany`（Craft Anything 项目目录）· `.mlt` 类交换走 FilmCraft `file.exportInterchange`。
 - 跨成员交付用交换格式：**FilmCraft `file.exportInterchange` 支持 edl / xml / fcpxml / otio / aaf / omf**；音频交接用 `file.exportAaf`/`file.exportOmf`（含 handles、breakoutToMono）。
 
 ## 七、常见失败与对策

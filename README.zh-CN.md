@@ -15,11 +15,13 @@
 ## 为什么做这个
 
 [ArtCraft](https://getartcraft.com/apps) 是一套用纯 Rust 从零重写的免费公平源代码（fair source）
-Adobe 对标工具，共 **14 个应用**：**PhotoCraft**（Photoshop）、**VectorCraft**（Illustrator）、
+Adobe 对标工具，共 **17 个应用**：**PhotoCraft**（Photoshop）、**VectorCraft**（Illustrator）、
 **FilmCraft**（Premiere Pro）、**LightCraft**（Lightroom）、**PdfCraft**（Acrobat）、
 **EffectCraft**（After Effects）、**DesignCraft**（InDesign）、**WordCraft**（Word）、
 **DeckCraft**（PowerPoint）、**GridCraft**（Excel）、**CADCraft**（AutoCAD）、**SoundCraft**
-（Pro Tools）、**FigCraft**（Figma）、**SolidCraft**（三维参数化 CAD）。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、
+（Pro Tools）、**FigCraft**（Figma）、**SolidCraft**（三维参数化 CAD）、
+**MaterialCraft**（Substance Designer 类节点式材质）、**TextureCraft**（Substance Painter 类纹理绘制与烘焙）、
+**Craft Anything**（软件研究与重建工具，不属于创作类应用）。它们有一个大多数桌面软件都不具备的共同基因：**每个菜单项、
 滑块、对话框都是一条命令**，而同一套命令既能从无头 CLI 调用，也能走 JSON 控制通道或 MCP——
 这些 App 从第一天起就是为 agent 设计的。
 
@@ -70,7 +72,10 @@ FilmCraft 剪辑、调色、混音、烧字幕 → 导出 H.264。"生成"之后
 - **ArtCraft 应用** —— 从 [getartcraft.com](https://getartcraft.com/apps) 或
   [storytold GitHub Releases](https://github.com/storytold) 按需下载。Windows 与 Linux 的
   portable/安装包内置 CLI（`photocraft-cli.exe` 等）；macOS 的 CLI 是单独的公证 zip。
-  已验证版本：PhotoCraft 0.9、FilmCraft 0.8、EffectCraft（早期构建）。
+  已验证版本（2026-11 发布批次）：PhotoCraft 0.22、VectorCraft 0.23、FilmCraft 0.19、
+  LightCraft 0.20、PdfCraft 0.20、EffectCraft 0.23.1、DesignCraft 0.19、WordCraft 0.17、
+  DeckCraft 0.17、GridCraft 0.18、CADCraft 0.19、SoundCraft 0.19、FigCraft 0.17、
+  SolidCraft 0.30.1、MaterialCraft 0.3、TextureCraft 0.5、Craft Anything 0.6。
 - 其他什么都不需要：无 Python、无 FFmpeg —— ArtCraft 自带编解码器。
 
 ## 安装

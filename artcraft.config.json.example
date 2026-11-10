@@ -1,8 +1,8 @@
 {
   "bins": {
-    "photocraft": "C:/craft/<PhotoCraft portable folder>",
+    "photocraft": "C:/Program Files/PhotoCraft",
     "vectorcraft": "C:/Program Files/VectorCraft",
-    "filmcraft": "C:/craft/<FilmCraft portable folder>",
+    "filmcraft": "C:/Program Files/FilmCraft",
     "lightcraft": "C:/Program Files/LightCraft",
     "pdfcraft": "C:/Program Files/PdfCraft",
     "effectcraft": "C:/Program Files/EffectCraft",
@@ -13,8 +13,14 @@
     "cadcraft": "C:/Program Files/CADCraft",
     "soundcraft": "C:/Program Files/SoundCraft",
     "figcraft": "C:/Program Files/FigCraft",
-    "solidcraft": "D:/Develop/ArtCraft/solidcraft/SolidCraft/solidcraft-cli.exe"
+    "solidcraft": "C:/Program Files/SolidCraft",
+    "materialcraft": "C:/Program Files/MaterialCraft",
+    "texturecraft": "C:/Program Files/TextureCraft",
+    "craftanything": "C:/Program Files/Craft Anything"
   },
+  "roots": [
+    "D:/Develop/ArtCraft"
+  ],
   "control": {
     "filmcraft": 9876,
     "effectcraft": 9877,

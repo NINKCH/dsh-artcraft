@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "note": "ArtCraft 家族 14 应用的自动化能力目录。来源：官方 getartcraft.com/apps、各应用 GitHub 仓库（storytold/*）、本机 14 个 <app>-cli --help 实测（2026-10 时点）。要拿某应用的实时命令注册表，用 artcraft_cli 跑该应用的 commands 子命令。",
+  "version": "2026-11-10",
+  "note": "ArtCraft 家族 17 应用的自动化能力目录。来源：官方 getartcraft.com/apps、各应用 GitHub 仓库（storytold/*，SolidCraft 独立分发）、本机 17 个 <app>-cli --help 实测（2026-11 时点）。要拿某应用的实时命令注册表，用 artcraft_cli 跑该应用的 commands 子命令。",
   "controlProtocol": "家族共用 JSON-lines 控制协议（127.0.0.1:<port>，请求 {\"id\",\"method\",\"params\"}，方法如 engine.execute / engine.commands / ui.inspect / ui.screenshot）。App 需以 --control 启动。artcraft_control 已代理有固定默认端口的应用；其余应用端口动态（app --port 启动时指定），可用 artcraft_control 的 port 参数直连。",
   "apps": [
     {
@@ -957,139 +957,343 @@
         "appearance 10 与 material 8（外观/材质）",
         "plastic 7（注塑特征）"
       ]
+    },
+    {
+      "id": "materialcraft",
+      "name": "MaterialCraft",
+      "tagline": "节点式材质设计（PBR 材质图 → 贴图输出）",
+      "ref": "Adobe Substance 3D Designer",
+      "stage": "early alpha",
+      "repo": "https://github.com/storytold/materialcraft",
+      "docs": "https://getartcraft.com/apps/materialcraft",
+      "cli": "materialcraft-cli",
+      "control": null,
+      "controlNote": "无固定控制端口；mcp --bridge <port> 可桥接运行中的 app（materialcraft --control <port>），serve 走 127.0.0.1:<port> + token。原生包格式为 .sbs（可读写），烘焙/渲染走 CPU，无需 GPU",
+      "mcp": true,
+      "subcommands": [
+        {
+          "name": "info",
+          "usage": "info <package.sbs | sample>",
+          "summary": "图的节点/输出/cook 结果 JSON（QC 探针入口，sample 为内置示例包）"
+        },
+        {
+          "name": "commands",
+          "usage": "commands [--filter <text>]",
+          "summary": "列出引擎命令注册表（id / label / params）"
+        },
+        {
+          "name": "nodes",
+          "usage": "nodes [--filter <text>] [--category <text>]",
+          "summary": "节点库清单（id / 端口 / 参数）"
+        },
+        {
+          "name": "run",
+          "usage": "run <input> <command-id> [params-json] [-o <out.sbs>]",
+          "summary": "执行一条引擎命令并打印 JSON 结果，-o 保存包"
+        },
+        {
+          "name": "batch",
+          "usage": "batch <script.json>",
+          "summary": "批处理：[{\"id\",\"params\"},…] 或 {\"open\",\"steps\",\"save\"} 形态"
+        },
+        {
+          "name": "new",
+          "usage": "new <template> <out.sbs> [--size <px>] [--name <name>]",
+          "summary": "新建包（模板 empty / pbr / atomics）"
+        },
+        {
+          "name": "cook",
+          "usage": "cook <input> [--graph <i>] [--set <input>=<value>]… [--full]",
+          "summary": "cook 图并输出每个节点的耗时与错误"
+        },
+        {
+          "name": "export",
+          "usage": "export <input> <dir> [--graph i] [--set k=v]… [--format ext] [--depth 8|16|32] [--size px] [--pattern p]",
+          "summary": "按全尺寸 cook 并写出全部输出（png/jpg/tga/tif/bmp/webp/exr/hdr）"
+        },
+        {
+          "name": "render",
+          "usage": "render <input> <out.png> [--size WxH] [--view 3d|2d] [--scene id] [--node id] [--yaw][--pitch][--tiling n][--hq]",
+          "summary": "把材质渲到 3D 场景（rounded_cube/cube/sphere/cylinder/plane/torus/material_ball）或单节点 2D 输出；--hq 为精细光照渲染"
+        },
+        {
+          "name": "mcp",
+          "usage": "mcp [--bridge <port>] [--token T] [--read-root DIR] [--write-root DIR]",
+          "summary": "stdio MCP 服务器（headless 或桥接运行中的 app）"
+        },
+        {
+          "name": "serve",
+          "usage": "serve [--port <port>] [--read-root DIR] [--write-root DIR]",
+          "summary": "JSON lines 会话（stdio 或 127.0.0.1:<port> + token）"
+        }
+      ],
+      "commandFamilies": [
+        "graph 61（建图/加节点/连线/输出/参数）",
+        "file 13 与 edit 13（包与编辑）",
+        "view 8（2D/3D 预览与相机）",
+        "folder 5 与 package 3（文件夹/包结构）",
+        "explorer 3 与 library 3（节点库浏览）",
+        "节点库 29 个节点（--category 过滤）"
+      ],
+      "workflow": "MaterialCraft 出材质贴图 → 交给 TextureCraft 画细节 / 交给 FilmCraft·EffectCraft 做材质球与 3D 合成；导出 EXR/HDR 走 32 位，颜色走 sRGB 通道。"
+    },
+    {
+      "id": "texturecraft",
+      "name": "TextureCraft",
+      "tagline": "3D 纹理绘制与 PBR 贴图烘焙（含网格贴图烘焙、UDIM）",
+      "ref": "Adobe Substance 3D Painter",
+      "stage": "early alpha",
+      "repo": "https://github.com/storytold/texturecraft",
+      "docs": "https://getartcraft.com/apps/texturecraft",
+      "cli": "texturecraft-cli",
+      "control": null,
+      "controlNote": "无固定控制端口；mcp --bridge <port> 桥接运行中的 app，serve 走 127.0.0.1:<port> + token。渲染需 GPU 或软件适配器（--cpu 可强制 CPU）；工程格式 .tcraft，网格支持 glb/gltf/fbx/dae/usd/usdz/abc/obj/ply/stl",
+      "mcp": true,
+      "subcommands": [
+        {
+          "name": "info",
+          "usage": "info <project.tcraft | mesh file | builtin:<id>>",
+          "summary": "纹理集/图层/三角面/材质/UV 报告 JSON（QC 探针入口）"
+        },
+        {
+          "name": "commands",
+          "usage": "commands [--filter <text>]",
+          "summary": "列出引擎命令注册表"
+        },
+        {
+          "name": "run",
+          "usage": "run <input> <command-id> [params-json] [-o <out.tcraft>]",
+          "summary": "执行一条命令并打印 JSON 结果，-o 保存工程"
+        },
+        {
+          "name": "batch",
+          "usage": "batch <script.json>",
+          "summary": "批处理命令序列"
+        },
+        {
+          "name": "bake",
+          "usage": "bake <input> [-o <out>] [--resolution px] [--maps id,id,…]",
+          "summary": "为每个纹理集烘焙网格贴图（AO/法线/曲率/厚度等）"
+        },
+        {
+          "name": "export",
+          "usage": "export <input> <dir> [--preset name] [--format ext] [--padding mode] [--size px]",
+          "summary": "导出贴图（默认预设：文档通道 + Normal + AO）"
+        },
+        {
+          "name": "render",
+          "usage": "render <input> <out.png> [--size WxH] [--view 3d|2d] [--camera name] [--samples n] [--bounces n] [--cpu]",
+          "summary": "视口出图；--samples 走路径追踪（Rendering 模式）"
+        },
+        {
+          "name": "new",
+          "usage": "new <mesh|builtin:<id>> <out.tcraft> [--resolution px] [--sample]",
+          "summary": "新建工程；--sample 会烘焙并套用智能材质（内置网格：material_ball/sphere/cube/rounded_cube/cylinder/torus/plane/crate/udim_plane）"
+        },
+        {
+          "name": "mcp",
+          "usage": "mcp [--bridge <port>] [--token T] [--read-root DIR] [--write-root DIR]",
+          "summary": "stdio MCP 服务器"
+        },
+        {
+          "name": "serve",
+          "usage": "serve [--port <port>] [--read-root DIR] [--write-root DIR]",
+          "summary": "JSON lines 会话"
+        }
+      ],
+      "commandFamilies": [
+        "layer 26 与 mask 10（绘画层与蒙版）",
+        "tool 20 与 brush 4（画笔/橡皮/填充）",
+        "camera 17 与 viewport 11（视图与相机）",
+        "effect 16（图层效果）",
+        "textureSet 16（纹理集与 UDIM 分块）",
+        "bake 13（网格贴图烘焙）",
+        "file 11 与 project 5（工程）",
+        "material 8（智能材质）",
+        "export 5（通道导出预设）"
+      ],
+      "workflow": "TextureCraft 出 PBR 贴图 → FilmCraft/EffectCraft 的 3D 图层与材质球，或 MaterialCraft 的材质图里当输入；烘焙前先在 DCC 里确认 UV 岛无重叠。"
+    },
+    {
+      "id": "craftanything",
+      "name": "Craft Anything",
+      "tagline": "软件研究与重建（看清任意软件怎么运作，再自己实现一份）",
+      "ref": null,
+      "stage": "early alpha",
+      "repo": "https://github.com/storytold/craft-anything",
+      "docs": "https://getartcraft.com/apps/craftanything",
+      "cli": "craft-anything-cli",
+      "control": null,
+      "controlNote": "不是创作类应用：没有「打开工程 → 执行命令 → 出图」的引擎面，commands 列的是 322 个 agent 工具。默认 clean-room（不读目标内部）；--deep 允许读代码/文件/页面源码，--allow-run 允许跑代码与改设备。项目目录 *.cany，证据/记忆/日志都在里面",
+      "mcp": true,
+      "subcommands": [
+        {
+          "name": "capabilities",
+          "usage": "capabilities [--json]",
+          "summary": "本次安装能做什么：工具集、工具可用性、外部引擎（ghidra/jadx/frida/adb/…）"
+        },
+        {
+          "name": "commands",
+          "usage": "commands [--json]",
+          "summary": "列出全部 322 个工具（每个工具同时是一个子命令）"
+        },
+        {
+          "name": "triage",
+          "usage": "triage <target> [--project DIR]",
+          "summary": "打开目标并跑第一轮体检"
+        },
+        {
+          "name": "report",
+          "usage": "report [--html] [--project DIR]",
+          "summary": "把发现与证据写成可读报告（Markdown/HTML）"
+        },
+        {
+          "name": "chat",
+          "usage": "chat <question>",
+          "summary": "就当前目标问 AI agent（流式输出）"
+        },
+        {
+          "name": "rebuild",
+          "usage": "rebuild <target> [--project DIR]",
+          "summary": "研究一个网站/应用/游戏，让编码 agent 在新目录里重建它"
+        },
+        {
+          "name": "doctor",
+          "usage": "doctor",
+          "summary": "检查安装、注册、引擎、AI 后端与 MCP 服务器"
+        },
+        {
+          "name": "setup",
+          "usage": "setup [--client …]",
+          "summary": "把 Craft Anything 接到编码 agent 客户端"
+        },
+        {
+          "name": "ai",
+          "usage": "ai <subcommand>",
+          "summary": "管理 AI 后端（模型/密钥）"
+        },
+        {
+          "name": "mcp",
+          "usage": "mcp",
+          "summary": "stdio MCP 服务器（322 个工具即 MCP 工具）"
+        }
+      ],
+      "commandFamilies": [
+        "core 36（会话/证据/未知点/假设/发现/计划/报告）",
+        "native 55（PE/ELF/Mach-O：函数、字符串、xrefs、反编译）",
+        "formats 36（wasm/EVM/sbpf/固件/游戏包/资源格式）",
+        "browser 22 与 javascript 11（网站与 Electron）",
+        "adb 24（连接手机：应用、日志、截图、安装）",
+        "projects 29 与 build 6（工程与构建产物）",
+        "apple 14 / android 14 / java 6 / managed 8 / runtime 14 / frida 9",
+        "application 17（对比与重建：图对比、覆盖率、重建自检）",
+        "本机外部引擎已就绪：adb / chromium / gdb / java / objdump"
+      ],
+      "workflow": "与创作流程无关，是「研究工具」：插件把它当一个可调用的 CLI 暴露（artcraft_cli），不建议放进视频/图像管线。"
     }
   ],
   "capabilityStats": {
-    "note": "2026-10-31 实测（家族全量更新后：photocraft 0.18.0 / vectorcraft 0.19.0 / filmcraft 0.15.0 / lightcraft 0.16.0 / pdfcraft 0.16.1 / effectcraft 0.19.0 / designcraft 0.15.2 / wordcraft 0.13.2 / deckcraft 0.13.1 / gridcraft 0.14.2 / cadcraft 0.15.1 / soundcraft 0.15.0 / figcraft 0.13.1；solidcraft 0.28.0 为独立分发，不入 GitHub 家族仓）。JSON 注册表入口（filmcraft / effectcraft / photocraft / gridcraft / wordcraft / figcraft / solidcraft 用 commands --json）为精确条目数，其余为 id 扫描值（近似）。用 artcraft_cli 跑 commands 可随时复核。",
+    "note": "2026-11-10 实测（家族再次全量更新 + 新增 MaterialCraft / TextureCraft / Craft Anything）：photocraft 0.22.0 / vectorcraft 0.23.0 / filmcraft 0.19.0 / lightcraft 0.20.0 / pdfcraft 0.20.0 / effectcraft 0.23.1 / designcraft 0.19.0 / wordcraft 0.17.0 / deckcraft 0.17.0 / gridcraft 0.18.0 / cadcraft 0.19.0 / soundcraft 0.19.0 / figcraft 0.17.0 / solidcraft 0.30.1 / materialcraft 0.3.0 / texturecraft 0.5.0 / craftanything 0.6.0。取数口径：每个应用取 commands / commands --json / tools 中条目最多的一次（JSON 模式为精确条目数，文本表为 id 扫描值），cadcraft 的扁平 id 也计入，pdfcraft 用 tools 注册表。solidcraft 独立分发（不在 storytold GitHub 组织）。用 artcraft_cli 跑 commands 可随时复核。",
     "apps": {
       "photocraft": {
-        "commands": 948,
+        "commands": 1005,
         "topFamilies": [
-          "filter 62（gallery 47 / blur 11 / stylize 9 / distort 9 / render 9）",
-          "image.adjustments 9",
-          "layer 26",
-          "edit 31",
-          "select 19",
-          "paint 12",
-          "brush 13",
-          "gradient 12",
-          "type 9",
-          "shape 9",
-          "path 9",
-          "pattern 10",
-          "file.automate 18",
-          "channel 18",
-          "actions 14",
-          "swatches 9",
-          "slice 6",
-          "select.refineEdge（0.15 参数化选择与遮罩）"
+          "layer 233（图层与蒙版）",
+          "filter 124（滤镜族（gallery/blur/stylize/distort/render 分组））",
+          "type 98",
+          "edit 79",
+          "image 66",
+          "file 60",
+          "select 35",
+          "view 31",
+          "paint 28",
+          "path 27",
+          "actions 27",
+          "channel 22"
         ]
       },
       "vectorcraft": {
-        "commands": 452,
+        "commands": 966,
         "topFamilies": [
-          "object 71",
-          "perspective 24",
-          "select 18",
-          "text 10",
-          "variable 9",
-          "brush 9",
-          "library 9",
-          "print 9",
-          "pdf.preset 5",
-          "flattener 6",
-          "swatch 15",
-          "document 12",
-          "layer 11",
-          "path 11",
-          "symbol 10",
-          "dataset 10",
-          "shaper 4"
+          "object 152（对象变换/编组/对齐）",
+          "addon 74（插件与脚本扩展）",
+          "select 55",
+          "text 42",
+          "document 37",
+          "path 34",
+          "edit 31",
+          "file 28",
+          "type 27",
+          "layer 26",
+          "symbol 25",
+          "perspective 25（透视网格）"
         ]
       },
       "filmcraft": {
-        "commands": 711,
+        "commands": 718,
         "topFamilies": [
-          "graphics 82",
-          "clip 57",
+          "graphics 83（图形与字幕模板）",
           "file 57",
-          "timeline 56",
-          "sequence 45",
+          "clip 57",
+          "timeline 57（时间线编辑）",
+          "sequence 51",
           "project 40",
           "edit 39",
-          "multicam 35",
-          "markers 32",
-          "trim 24",
-          "captions 22",
-          "mixer 20",
-          "export 19",
-          "effects 16",
-          "transcript 14",
-          "masks 12",
-          "essentialSound 9",
-          "lumetri 7",
-          "tts 7",
-          "lut 4"
+          "multicam 35（多机位）",
+          "markers 33",
+          "trim 24（三点/四点编辑）",
+          "captions 23（字幕/转写）",
+          "mixer 20（混音）"
         ]
       },
       "lightcraft": {
-        "commands": 229,
+        "commands": 389,
         "developControls": 122,
         "topFamilies": [
-          "print 17（打印版式模板：cell/layout/template）",
-          "slideshow.export",
-          "library 20",
-          "faces 17",
-          "denoise 16",
-          "develop 16（122 个控制 / 14 分区）",
-          "photo 14",
-          "mask 12",
-          "keyword 12",
-          "preset 9",
-          "crop 6",
-          "stack 6"
-        ]
+          "library 48（图库）",
+          "photo 44",
+          "mask 31（蒙版）",
+          "develop 29（显影控制（122 个控制 / 18 个分区））",
+          "keyword 23（关键词）",
+          "faces 21（人脸识别）",
+          "print 20（打印版式）",
+          "denoise 16（AI 降噪）",
+          "album 15",
+          "slideshow 15",
+          "stack 11",
+          "preset 10（预设）"
+        ],
+        "version": "0.20.0"
       },
       "pdfcraft": {
-        "commands": 80,
+        "commands": 200,
         "topFamilies": [
-          "edit 13",
-          "page 10",
-          "measure 7",
-          "a11y 5",
-          "export 4",
-          "ocr 3",
-          "form 3",
-          "comment 3",
-          "protect 2",
-          "sign 2",
-          "create 1（新建 PDF）",
-          "text_edit 1"
+          "doc_* 系（打开/合并/拆分/导入/导出）",
+          "page_* 系（页面编辑/旋转/删除/移动）",
+          "a11y.check 与 a11y.report（无障碍）",
+          "measure.info（尺寸/出血测量）",
+          "optimize.reduce（体积压缩）",
+          "standards.pdfa（PDF/A 合规）",
+          "doc.compare（版本比对）",
+          "form / protect / sign（表单、加密、签名）"
         ]
       },
       "effectcraft": {
-        "commands": 742,
+        "commands": 761,
         "effects": 307,
         "topFamilies": [
-          "layer 121",
+          "layer 124（图层与合成）",
           "view 78",
-          "file 61",
-          "keys 36",
-          "comp 31",
+          "file 66",
+          "keys 37（关键帧）",
+          "comp 33（合成）",
           "edit 27",
-          "track 22",
-          "essential 22",
-          "renderQueue 20",
-          "effect 19",
-          "camera 19",
-          "prop 18（0.13.0 起属性读写统一走 prop.get/set，effect.setParam 已移除）",
-          "mask 17",
-          "time 17",
-          "roto 14",
-          "text 13",
-          "puppet 10",
-          "face 5（0.13 新增）",
-          "learn 5（0.13 新增）"
+          "effect 25（效果）",
+          "track 22（跟踪）",
+          "essential 22（基础属性）",
+          "camera 20（摄像机）",
+          "renderQueue 20（渲染队列）",
+          "prop 18"
         ],
         "exportFormats": [
           "H264",
@@ -1110,166 +1314,193 @@
         "scripting": true
       },
       "designcraft": {
-        "commands": 321,
+        "commands": 555,
         "topFamilies": [
-          "object 22",
-          "style 17",
-          "file 15",
+          "object 60（对象与框架）",
+          "type 43（排版）",
+          "file 41（文件）",
+          "table 41（表格）",
+          "layout 32（版式）",
+          "style 28（样式）",
+          "edit 18",
+          "text 17",
+          "path 15",
+          "swatch 13",
           "transform 10",
-          "data 10",
-          "type 10",
-          "toc 3（目录）",
-          "footnote 4（脚注）",
-          "xref 3（交叉引用）",
-          "index 3（索引）",
-          "preflight.run（印前检查）",
-          "condition 5（条件样式）",
-          "flex 5",
-          "layout 7",
-          "book 7",
-          "article 6"
+          "book 10"
         ]
       },
       "wordcraft": {
-        "commands": 648,
+        "commands": 670,
         "topFamilies": [
-          "para 28",
-          "format 25",
-          "file 18",
-          "review 16",
-          "caret 7",
-          "edit 10",
-          "outline 8",
-          "layout 7",
-          "fields 6",
-          "arrange 9",
-          "draw 9",
-          "canvas 4",
-          "chart 3",
-          "shape 6",
-          "equation 15",
-          "insert 15",
-          "table 14",
-          "styles 11",
-          "references 10"
+          "para 59（段落）",
+          "table 48（表格）",
+          "view 45",
+          "insert 44（插入）",
+          "format 41（格式）",
+          "review 36（审阅/批注）",
+          "edit 31",
+          "file 30",
+          "outline 26",
+          "references 25",
+          "text 24",
+          "mailings 23"
         ]
       },
       "deckcraft": {
-        "commands": 210,
+        "commands": 331,
         "topFamilies": [
-          "format 32",
-          "shape 19",
-          "slide 15",
-          "file 13",
-          "animation 10",
-          "text 10",
-          "picture 9",
-          "comment 7",
-          "review 7",
-          "table 5",
-          "chart 3",
-          "design 5",
-          "transition 4",
-          "handout 1",
-          "master 2"
+          "format 47（格式）",
+          "shape 37（形状）",
+          "slide 22（幻灯片）",
+          "table 21（表格）",
+          "file 19",
+          "insert 18（插入）",
+          "text 17",
+          "arrange 15",
+          "design 14",
+          "smartArt 13",
+          "edit 12",
+          "picture 12"
         ]
       },
       "gridcraft": {
-        "commands": 364,
+        "commands": 385,
         "topFamilies": [
-          "home 12",
-          "pivot 11",
-          "insert 10",
-          "data 10",
-          "cell 2",
-          "range 1",
-          "table 3",
-          "object 2",
-          "link 1",
-          "draw 4",
-          "arrange 3",
-          "review 2",
-          "formulas 5",
-          "chart 3",
-          "window 1"
+          "home 64（主页功能区）",
+          "data 41（数据）",
+          "formulas 32（公式）",
+          "view 30",
+          "edit 26",
+          "pivot 22（数据透视）",
+          "review 21（审阅）",
+          "insert 20",
+          "pageLayout 16",
+          "table 14",
+          "file 13",
+          "chart 12"
         ]
       },
       "cadcraft": {
-        "commands": 146,
+        "commands": 457,
         "topFamilies": [
-          "table 11",
-          "arc 10",
+          "table 11（表格）",
+          "arc 10（圆弧）",
           "zoom 9",
-          "dimstyle 7",
-          "blocks 6",
+          "layout 7（布局）",
+          "dimstyle 7（标注样式）",
+          "blocks 7（图块）",
+          "vports 6（视口）",
           "grip 6",
-          "layout 6",
-          "layerstate 5",
-          "vports 5",
           "circle 5",
           "dimtedit 5",
-          "compare 2",
-          "quickcalc 1"
+          "layerstate 5",
+          "pan 4"
         ]
       },
       "soundcraft": {
-        "commands": 482,
+        "commands": 483,
         "topFamilies": [
-          "view 96",
-          "edit 93",
-          "track 65",
-          "event 35",
-          "options 35",
-          "clip 31",
-          "mix 29",
+          "view 97（视图）",
+          "edit 94（编辑）",
+          "track 66（轨道）",
+          "event 35（音频事件（含 beat_detective））",
+          "options 35（选项）",
+          "clip 33（片段）",
+          "mix 29（混音）",
           "setup 20",
           "file 17",
           "transport 13",
-          "session 11（含 audio_health）",
-          "automation 10",
-          "midi 6（0.10 新增）",
-          "video 3（0.10 新增）",
-          "audiosuite 1"
+          "session 11",
+          "automation 10"
         ]
       },
       "figcraft": {
-        "commands": 629,
+        "commands": 643,
         "topFamilies": [
-          "text 52",
-          "view 48",
-          "vector 40",
-          "object 27",
-          "tool 21",
-          "select 21",
-          "component 21",
-          "collab 20",
-          "file 20",
-          "proto 20",
-          "library 18",
-          "variable 18",
-          "edit 15",
-          "comment 14",
-          "plugin 11",
-          "style 10"
+          "text 63",
+          "view 49",
+          "vector 42",
+          "tool 30（工具）",
+          "object 28",
+          "file 24",
+          "collab 22（协作/评论）",
+          "select 21（选择）",
+          "component 21（组件）",
+          "proto 21",
+          "board 21",
+          "variable 19（变量）"
         ]
       },
       "solidcraft": {
-        "commands": 553,
+        "commands": 570,
         "topFamilies": [
-          "sketch 125",
-          "render 57",
-          "view 39",
-          "solid 36",
-          "component 29",
-          "timeline 22",
-          "construct 19",
-          "surface 19",
-          "inspect 18",
-          "joint 18",
-          "parameters 13",
-          "sheet 13",
-          "motion 11",
-          "appearance 10"
+          "sketch 126（2D 草绘（线/圆/约束/标注））",
+          "render 60（无头渲染参数面）",
+          "view 40（视图/相机）",
+          "solid 36（实体特征（拉伸/旋转/扫掠/放样））",
+          "component 32（装配组件）",
+          "timeline 22（特征时间线）",
+          "construct 20（构造几何）",
+          "inspect 19（测量/剖面）",
+          "surface 19（曲面）",
+          "joint 18（装配约束）",
+          "file 16",
+          "sheet 13（钣金）"
+        ]
+      },
+      "materialcraft": {
+        "commands": 112,
+        "nodes": 29,
+        "topFamilies": [
+          "graph 61（材质图（新建/复制/节点连线/输出））",
+          "file 13",
+          "edit 13",
+          "view 8（2D/3D 预览）",
+          "folder 5",
+          "package 3（.sbs 包与文件夹）",
+          "explorer 3",
+          "library 3（节点库）",
+          "session 3"
+        ]
+      },
+      "texturecraft": {
+        "commands": 175,
+        "topFamilies": [
+          "layer 26（绘画层）",
+          "tool 20（画笔/橡皮/填充工具）",
+          "camera 17（视图相机）",
+          "effect 16",
+          "textureSet 16（纹理集）",
+          "bake 13（网格贴图烘焙（AO/法线/曲率））",
+          "viewport 11（视口）",
+          "file 11",
+          "mask 10（图层蒙版）",
+          "material 8（智能材质）",
+          "project 5",
+          "export 5"
+        ]
+      },
+      "craftanything": {
+        "commands": 322,
+        "toolsets": [
+          "core 36（Essentials）",
+          "native 55（Programs (native code)）",
+          "apple 14（Apple apps）",
+          "formats 36（File formats）",
+          "managed 8（.NET apps）",
+          "android 14（Android apps）",
+          "java 6（Java programs）",
+          "adb 24（Connected phone）",
+          "browser 22（Websites）",
+          "javascript 11（Electron and JavaScript）",
+          "runtime 14（Running programs）",
+          "frida 9（Frida instrumentation）",
+          "application 17（Comparing and rebuilding）",
+          "database 1（Databases）",
+          "projects 29（Projects）",
+          "setup 20（Engines and settings）",
+          "build 6（Building）"
         ]
       }
     }
